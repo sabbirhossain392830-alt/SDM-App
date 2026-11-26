@@ -33,26 +33,76 @@ class HistoryEntry {
 }
 
 /// Domains / patterns blocked when "Block Ads" is on.
-const List<String> _adPatterns = [
-  r'.*doubleclick\.net.*',
-  r'.*googlesyndication\.com.*',
-  r'.*googleadservices\.com.*',
-  r'.*adservice\.google\..*',
-  r'.*google-analytics\.com.*',
-  r'.*googletagmanager\.com.*',
-  r'.*adnxs\.com.*',
-  r'.*taboola\.com.*',
-  r'.*outbrain\.com.*',
-  r'.*popads\.net.*',
-  r'.*popcash\.net.*',
-  r'.*propellerads\.com.*',
-  r'.*exoclick\.com.*',
-  r'.*adsterra\.com.*',
-  r'.*pubmatic\.com.*',
-  r'.*criteo\.(com|net).*',
-  r'.*amazon-adsystem\.com.*',
-  r'.*/ads/.*\.js.*',
+/// Ad, tracker and pop-up networks. One list serves two jobs: the page
+/// requests to these hosts are blocked, and a page that tries to send the
+/// whole tab to one of them (ad redirects) is stopped.
+const List<String> _adDomains = [
+  // Google / big ad exchanges
+  'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
+  'adservice.google.com', 'google-analytics.com', 'googletagmanager.com',
+  'googletagservices.com', 'adsense.com', 'admob.com',
+  'amazon-adsystem.com', 'adnxs.com', 'adsrvr.org', 'rubiconproject.com',
+  'pubmatic.com', 'openx.net', 'casalemedia.com', 'indexww.com',
+  'criteo.com', 'criteo.net', 'smartadserver.com', 'adform.net',
+  'bidswitch.net', 'contextweb.com', 'lijit.com', 'sharethrough.com',
+  'teads.tv', 'media.net', 'yieldmo.com', 'triplelift.com', 'gumgum.com',
+  'moatads.com', 'adsafeprotected.com', 'scorecardresearch.com',
+  'quantserve.com', 'quantcount.com', 'serving-sys.com', 'advertising.com',
+  // native / recommendation ads
+  'taboola.com', 'outbrain.com', 'revcontent.com', 'mgid.com',
+  'zemanta.com', 'content-ad.net', 'nativeroll.tv',
+  // pop-up / pop-under / redirect networks
+  'popads.net', 'popcash.net', 'propellerads.com', 'propellerclick.com',
+  'exoclick.com', 'exosrv.com', 'adsterra.com', 'adsterratools.com',
+  'juicyads.com', 'trafficjunky.net', 'trafficfactory.biz',
+  'clickadu.com', 'hilltopads.net', 'hilltopads.com', 'richpush.co',
+  'pushhouse.io', 'evadav.com', 'adcash.com', 'a-ads.com', 'adskeeper.com',
+  'adxpansion.com', 'monetag.com', 'onclickads.net', 'onclkds.com',
+  'onclickmax.com', 'tsyndicate.com', 'bidvertiser.com', 'revenuehits.com',
+  'adspyglass.com', 'ad-maven.com', 'admaven.com', 'mc.yandex.ru',
+  'syndication.exdynsrv.com', 'ero-advertising.com', 'zeropark.com',
+  'realsrv.com', 'acscdn.com', 'highperformanceformat.com',
+  'highcpmgate.com', 'profitablegatecpm.com', 'cpmgate.com',
+  'effectivegatecpm.com', 'displayvertising.com', 'ad.gt',
+  // trackers
+  'hotjar.com', 'mouseflow.com', 'crazyegg.com', 'segment.io',
+  'mixpanel.com', 'amplitude.com', 'branch.io', 'adjust.com',
+  'appsflyer.com', 'chartbeat.com', 'newrelic.com', 'bugsnag.com',
+  'facebook.net', 'connect.facebook.net', 'ads-twitter.com',
+  'analytics.twitter.com', 'ads.linkedin.com', 'snap.licdn.com',
+  'ads.tiktok.com', 'analytics.tiktok.com', 'ct.pinterest.com',
 ];
+
+bool _isAdHost(String host) {
+  final h = host.toLowerCase();
+  for (final d in _adDomains) {
+    if (h == d || h.endsWith('.$d')) return true;
+  }
+  return false;
+}
+
+/// Request-blocking rules. Many hosts share one rule (the engine tests every
+/// request against every rule, so fewer rules means a faster page).
+final List<String> _adPatterns = [
+  for (var i = 0; i < _adDomains.length; i += 40)
+    r'^https?://([^/]*\.)?(' +
+        _adDomains
+            .skip(i)
+            .take(40)
+            .map((d) => d.replaceAll('.', r'\.'))
+            .join('|') +
+        r')(:\d+)?(/.*)?$',
+  r'.*/(ads?|adserver|banners?)/[^/]*\.js(\?.*)?$',
+  r'.*[/?&_.-](popunder|popundr|clickunder)[/?&_.-].*',
+];
+
+/// Empty ad boxes left on the page are hidden too.
+const String _adHideSelectors = 'ins.adsbygoogle, .adsbygoogle, '
+    '[id^="google_ads_iframe"], [id^="div-gpt-ad"], [id^="aswift_"], '
+    'iframe[src*="doubleclick.net"], iframe[src*="googlesyndication.com"], '
+    'iframe[src*="adsterra"], iframe[src*="exoclick"], '
+    '.ad-banner, .ad-container, .ads-container, .advert, .advertisement, '
+    '.sponsored-ad, #ad-banner, #ads, #adContainer';
 
 /// Shortcuts that older versions added by themselves: removed from the start
 /// page (only Google stays). Shortcuts the person added are never touched.
@@ -241,6 +291,7 @@ class BrowserController extends ChangeNotifier {
       showHome: url == null && windowId == null,
     );
     if (url != null) t.wantsWebView = true;
+    t.activated = true; // opened on purpose: load it now
     tabs.add(t);
     if (activate) active = tabs.length - 1;
     saveTabs();
@@ -389,7 +440,6 @@ class BrowserController extends ChangeNotifier {
         useShouldOverrideUrlLoading: true,
         useOnLoadResource: true,
         supportMultipleWindows: true,
-        javaScriptCanOpenWindowsAutomatically: true,
         mediaPlaybackRequiresUserGesture: true,
         allowsInlineMediaPlayback: true,
         useWideViewPort: true,
@@ -405,6 +455,8 @@ class BrowserController extends ChangeNotifier {
         preferredContentMode: desktopMode
             ? UserPreferredContentMode.DESKTOP
             : UserPreferredContentMode.RECOMMENDED,
+        // with ad blocking on, a page may not open windows by itself at all
+        javaScriptCanOpenWindowsAutomatically: !blockAds,
         contentBlockers: blockAds
             ? [
                 for (final p in _adPatterns)
@@ -413,6 +465,12 @@ class BrowserController extends ChangeNotifier {
                     action:
                         ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
                   ),
+                ContentBlocker(
+                  trigger: ContentBlockerTrigger(urlFilter: '.*'),
+                  action: ContentBlockerAction(
+                      type: ContentBlockerActionType.CSS_DISPLAY_NONE,
+                      selector: _adHideSelectors),
+                ),
               ]
             : [],
       );
@@ -576,8 +634,15 @@ class BrowserController extends ChangeNotifier {
 
   // -------------------------------------------------------------- media
 
-  static const _audioExt = {'mp3', 'm4a', 'aac', 'ogg', 'wav', 'flac', 'opus'};
-  static const _videoExt = {'mp4', 'webm', 'mkv', 'mov', '3gp', 'm4v'};
+  static const _audioExt = {
+    'mp3', 'm4a', 'aac', 'ogg', 'wav', 'flac', 'opus', 'weba', 'mka'
+  };
+  static const _videoExt = {
+    'mp4', 'webm', 'mkv', 'mov', '3gp', 'm4v', 'flv', 'avi', 'mpg', 'mpeg'
+  };
+
+  /// True when [host] belongs to an ad / tracker / pop-up network.
+  bool isAdHost(String host) => _isAdHost(host);
 
   static String _extOf(String url) {
     final u = Uri.tryParse(url);
@@ -597,6 +662,7 @@ class BrowserController extends ChangeNotifier {
         h.endsWith('youtu.be')) {
       return false;
     }
+    if (blockAds && _isAdHost(h)) return false; // ad videos are no downloads
     final ext = _extOf(url);
     if (ext == 'mpd') return false; // DASH is not supported
     return ext == 'm3u8' ||
@@ -625,12 +691,27 @@ class BrowserController extends ChangeNotifier {
     if (!captureMedia) return;
     if (!isCapturableMedia(url, fromMediaElement: element != null)) return;
     final ext = _extOf(url);
-    final existing = t.media.where((e) => e.url == url).firstOrNull;
-    if (existing != null) {
+    // the same file often comes back with a new token in the address:
+    // keep one entry (host + path) and refresh its address
+    final key = _mediaKey(url);
+    final idx = t.media.indexWhere((e) => _mediaKey(e.url) == key);
+    if (idx >= 0) {
+      final existing = t.media[idx];
+      var changed = false;
       if (height > 0 && existing.height == 0) {
         existing.height = height;
-        t.update(() {});
+        changed = true;
       }
+      if (existing.url != url && !existing.hls) {
+        t.media[idx] = MediaEntry(url,
+            audio: existing.audio,
+            height: existing.height,
+            bandwidth: existing.bandwidth,
+            size: existing.size,
+            label: existing.label);
+        changed = true;
+      }
+      if (changed) t.update(() {});
       return;
     }
     if (ext == 'm3u8') {
@@ -642,6 +723,12 @@ class BrowserController extends ChangeNotifier {
     // pages that load many small pieces must not grow the list without end
     if (t.media.length > 80) t.media.removeRange(0, t.media.length - 80);
     t.update(() {});
+  }
+
+  static String _mediaKey(String url) {
+    final u = Uri.tryParse(url);
+    if (u == null) return url;
+    return '${u.host}${u.path}';
   }
 
   Future<void> _addHls(BrowserTab t, String url) async {

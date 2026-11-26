@@ -15,6 +15,12 @@ import subprocess
 import sys
 
 
+# The app was moved to a new repository: its first releases were numbered
+# from 1.0.x again. Never go below this, so the version keeps counting up
+# from the last SDM 2.0.1.
+FLOOR = (2, 0, 1)
+
+
 def run(*cmd):
     return subprocess.run(cmd, check=True, text=True,
                           capture_output=True).stdout
@@ -56,6 +62,8 @@ def main():
             ver = tuple(int(x) for x in m.groups())
         else:  # old release without a version in its title: keep pubspec's
             since = tag
+    if ver < FLOOR:
+        ver = FLOOR
     rng = f"{since}..HEAD" if since else "HEAD~1..HEAD"
     try:
         subjects = run("git", "log", "--format=%s", rng).splitlines()

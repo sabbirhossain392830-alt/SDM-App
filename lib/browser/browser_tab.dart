@@ -74,6 +74,10 @@ class BrowserTab extends ChangeNotifier {
   /// True once a WebView should exist for this tab.
   bool wantsWebView = false;
 
+  /// Tabs restored from the last session keep their address but get a WebView
+  /// only when first opened: the app starts faster and uses less memory.
+  bool activated = false;
+
   InAppWebViewController? controller;
   FindInteractionController? findController;
 

@@ -33,7 +33,7 @@ class TabView extends StatelessWidget {
       builder: (context, _) {
         return Stack(
           children: [
-            if (tab.hasWebView)
+            if (tab.hasWebView && tab.activated)
               Positioned.fill(
                 child: _WebHost(
                   key: ValueKey('host_${tab.id}'),
@@ -137,6 +137,8 @@ class _WebHostState extends State<_WebHost> {
         UserScript(
           source: _hookJs,
           injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+          // players inside iframes are found too
+          forMainFrameOnly: false,
         ),
       ]),
       onWebViewCreated: (c) {
@@ -223,6 +225,14 @@ class _WebHostState extends State<_WebHost> {
         final scheme = u.scheme;
         if (scheme == 'http' || scheme == 'https') {
           final uri = Uri.tryParse(u.toString());
+          // an ad network trying to take over the tab: stopped
+          if (browser.blockAds &&
+              action.isForMainFrame &&
+              uri != null &&
+              action.hasGesture != true &&
+              browser.isAdHost(uri.host)) {
+            return NavigationActionPolicy.CANCEL;
+          }
           if ((action.isForMainFrame) && uri != null && _looksLikeFile(uri)) {
             widget.onDownload(DownloadRequest(
               url: u.toString(),
@@ -327,6 +337,24 @@ class _WebHostState extends State<_WebHost> {
   ['play','playing','loadedmetadata','loadeddata'].forEach(function(n){
     document.addEventListener(n,send,true);
   });
+  // players that fetch their stream by script (HLS / mp4 / audio): report the
+  // address as soon as the request is made
+  var re=/\\.(m3u8|mp4|webm|mkv|m4v|mov|flv|mp3|m4a|aac|ogg|opus|wav|flac)(\\?|#|\$)/i;
+  function seen(u){
+    try{
+      if(!u||typeof u!=='string') return;
+      var a=new URL(u,location.href).href;
+      if(!re.test(a)) return;
+      var m=a.match(/\\.(mp3|m4a|aac|ogg|opus|wav|flac)(\\?|#|\$)/i);
+      window.flutter_inappwebview.callHandler('drom_media',{u:a,k:m?'audio':'video',h:0});
+    }catch(x){}
+  }
+  try{
+    var xo=XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open=function(m,u){seen(u);return xo.apply(this,arguments);};
+    var fo=window.fetch;
+    if(fo) window.fetch=function(r){try{seen(typeof r==='string'?r:(r&&r.url));}catch(x){} return fo.apply(this,arguments);};
+  }catch(x){}
 })();
 ''';
 
@@ -352,7 +380,7 @@ class _WebHostState extends State<_WebHost> {
 
   /// Players often start late: look again a few times after the page loads.
   void _scanLater(InAppWebViewController c) {
-    for (final s in const [2, 6, 14]) {
+    for (final s in const [1, 3, 8, 16]) {
       Future.delayed(Duration(seconds: s), () {
         if (mounted && browser.captureMedia && tab.controller == c) {
           _scanMedia(c);
