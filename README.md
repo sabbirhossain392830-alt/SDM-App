@@ -17,7 +17,6 @@
 - ডাউনলোড লিস্ট ও ব্রাউজার হিস্টোরিতে লং-প্রেস করে এক বা একাধিক ডিলিট; হিস্টোরিতে সাইটের আইকন
 - Chrome-এর মতো নিচে টেনে রিফ্রেশ (হোম, ব্রাউজার)
 - **Settings → Notification settings**: অনুমতি, অগ্রগতি/স্পিড/বাকি সময়, আলাদা নোটিফিকেশন, Pause/Resume বোতাম, শেষ/ব্যর্থ নোটিফিকেশন, সাউন্ড, ভাইব্রেট, পপ-আপ, লক স্ক্রিন, টেস্ট
-- ইউটিউব থেকে ভিডিও ডাউনলোড করা যাবে অডিও ডাউনলোড করা যাবে। 
 
 ## APK বানানোর উপায় (Android Studio ছাড়াই)
 
@@ -60,4 +59,3 @@ flutter build apk --release
 - `tool/MainActivity.kt.tpl` – keeps the Flutter engine alive after the app is closed
 - `lib/updater.dart` – update check against GitHub Releases
 - `assets/icon/logo.png` – the SDM logo; `tool/make_icon.py` builds the launcher icons from it
-
