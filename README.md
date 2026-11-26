@@ -59,3 +59,5 @@ flutter build apk --release
 - `tool/MainActivity.kt.tpl` – keeps the Flutter engine alive after the app is closed
 - `lib/updater.dart` – update check against GitHub Releases
 - `assets/icon/logo.png` – the SDM logo; `tool/make_icon.py` builds the launcher icons from it
+
+ইউটিউব থেকে ভিডিও ডাউনলোড করা যাবে অডিও ডাউনলোড করা যাবে 
