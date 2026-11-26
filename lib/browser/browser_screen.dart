@@ -247,6 +247,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   @override
   Widget build(BuildContext context) {
+    browser.current.activated = true; // its WebView is created now
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
