@@ -308,11 +308,20 @@ class _BrowserScreenState extends State<BrowserScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(3),
           child: (t.isLoading && !t.showHome)
-              ? LinearProgressIndicator(
-                  value: t.progress > 0 ? t.progress / 100 : null,
-                  minHeight: 3,
-                  backgroundColor: Colors.transparent,
-                )
+              ? (t.progress > 0
+                  // glides to the new value instead of jumping
+                  ? TweenAnimationBuilder<double>(
+                      tween: Tween(end: t.progress / 100),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, v, __) => LinearProgressIndicator(
+                        value: v,
+                        minHeight: 3,
+                        backgroundColor: Colors.transparent,
+                      ),
+                    )
+                  : const LinearProgressIndicator(
+                      minHeight: 3, backgroundColor: Colors.transparent))
               : const SizedBox(height: 3),
         ),
       ),
