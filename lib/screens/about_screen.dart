@@ -2,7 +2,6 @@ import '../pull_refresh.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n.dart';
-import '../link_intake.dart';
 import '../update_ui.dart';
 import '../updater.dart';
 
@@ -96,42 +95,8 @@ class _AboutScreenState extends State<AboutScreen> {
               _updateCard(cs),
             ],
           )),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: SafeArea(child: _websiteLink(cs)),
-            ),
           ]);
         },
-      ),
-    );
-  }
-
-  /// Plain link, centred at the bottom: opens the website in the SDM browser.
-  Widget _websiteLink(ColorScheme cs) {
-    const url = 'https://sdmapk.pages.dev/';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Center(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => LinkIntake.instance.handleText(url),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.language_rounded, size: 18, color: cs.primary),
-              const SizedBox(width: 8),
-              Text('sdmapk.pages.dev',
-                  style: TextStyle(
-                      color: cs.primary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline,
-                      decorationColor: cs.primary)),
-            ]),
-          ),
-        ),
       ),
     );
   }

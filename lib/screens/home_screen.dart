@@ -13,6 +13,7 @@ import '../updater.dart';
 import '../browser/browser_controller.dart';
 import '../browser/browser_screen.dart';
 import 'app_settings_screen.dart';
+import '../flow_widgets.dart';
 import '../l10n.dart';
 
 enum _Filter { all, active, completed }
@@ -506,7 +507,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
@@ -515,7 +515,14 @@ class _HomeScreenState extends State<HomeScreen> {
           end: Alignment.bottomRight,
         ),
       ),
-      child: Column(
+      child: FlowWaves(
+        active: active.isNotEmpty,
+        energy: (speed / (8 * 1024 * 1024)).clamp(0.0, 1.0),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
+          child: Column(
         children: [
           Row(
             children: [
@@ -578,6 +585,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ],
+          ),
+        ),
       ),
     );
   }
@@ -776,17 +785,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               if (!done) ...[
                 const SizedBox(height: 10),
-                // thin progress line
+                // progress line with a light travelling along it
                 Padding(
                   padding: const EdgeInsets.only(right: 10),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      minHeight: 5,
-                      value: d.total > 0 ? d.progress : (running ? null : 0),
-                      color: failed ? cs.error : kind.color,
-                      backgroundColor: kind.color.withValues(alpha: 0.15),
-                    ),
+                  child: FlowBar(
+                    value: d.total > 0 ? d.progress : (running ? null : 0),
+                    running: running,
+                    color: failed ? cs.error : kind.color,
                   ),
                 ),
                 const SizedBox(height: 7),
