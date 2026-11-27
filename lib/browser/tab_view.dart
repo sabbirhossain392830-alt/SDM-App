@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import 'browser_controller.dart';
@@ -272,6 +273,15 @@ class _WebHostState extends State<_WebHost> {
           ? pageLocation(context, origin)
           : GeolocationPermissionShowPromptResponse(
               origin: origin, allow: false, retain: false),
+      onReceivedServerTrustAuthRequest: (c, ch) async =>
+          mounted ? pageSslError(context, ch) : null,
+      // a video taken full screen turns the phone sideways, like Chrome
+      onEnterFullscreen: (c) => SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]),
+      onExitFullscreen: (c) =>
+          SystemChrome.setPreferredOrientations(DeviceOrientation.values),
       onReceivedHttpAuthRequest: (c, ch) async =>
           mounted ? pageLogin(context, ch) : null,
       onLongPressHitTestResult: (c, hit) {

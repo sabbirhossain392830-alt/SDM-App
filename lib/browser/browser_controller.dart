@@ -71,6 +71,20 @@ const List<String> _adDomains = [
   'facebook.net', 'connect.facebook.net', 'ads-twitter.com',
   'analytics.twitter.com', 'ads.linkedin.com', 'snap.licdn.com',
   'ads.tiktok.com', 'analytics.tiktok.com', 'ct.pinterest.com',
+  // more ad exchanges, video ads and push-notification spam
+  'adition.com', 'adtech.com', 'adtechus.com', 'advertising.amazon.com',
+  'appnexus.com', 'bluekai.com', 'demdex.net', 'everesttech.net',
+  'exelator.com', 'eyeota.net', 'krxd.net', 'liadm.com', 'mathtag.com',
+  'media6degrees.com', 'nexac.com', 'omtrdc.net', 'rlcdn.com',
+  'rfihub.com', 'sitescout.com', 'spotxchange.com', 'springserve.com',
+  'tapad.com', 'turn.com', 'undertone.com', 'videohub.tv', 'vidoomy.com',
+  'yieldlab.net', 'zedo.com', 'adhigh.net', 'adkernel.com', 'adbrite.com',
+  'admixer.net', 'bidtheatre.com', 'getpopunder.com', 'popmyads.com',
+  'push-sdk.com', 'pushengage.com', 'onesignal-ads.com', 'notix.io',
+  'pushwhy.com', 'webpushr-ads.com', 'clickaine.com', 'clickporn.com',
+  'direct-click.net', 'dolohen.com', 'fpnpmcdn.net', 'ntvpforever.com',
+  'oclasrv.com', 'pemsrv.com', 'playukinternet.com', 'tzegilo.com',
+  'wpnrtnmrewunrtok.xyz', 'yllix.com', 'yuhuads.com', 'ziffstatic-ads.com',
 ];
 
 bool _isAdHost(String host) {
@@ -102,7 +116,11 @@ const String _adHideSelectors = 'ins.adsbygoogle, .adsbygoogle, '
     'iframe[src*="doubleclick.net"], iframe[src*="googlesyndication.com"], '
     'iframe[src*="adsterra"], iframe[src*="exoclick"], '
     '.ad-banner, .ad-container, .ads-container, .advert, .advertisement, '
-    '.sponsored-ad, #ad-banner, #ads, #adContainer';
+    '.sponsored-ad, #ad-banner, #ads, #adContainer, '
+    // cookie / consent banners
+    '#onetrust-banner-sdk, #onetrust-consent-sdk, .cookie-banner, '
+    '.cookie-notice, #cookie-notice, #cookie-banner, .cc-window, '
+    '.cookie-consent, [id*="cookie-consent"], [class*="cookie-consent"]';
 
 /// Shortcuts that older versions added by themselves: removed from the start
 /// page (only Google stays). Shortcuts the person added are never touched.
