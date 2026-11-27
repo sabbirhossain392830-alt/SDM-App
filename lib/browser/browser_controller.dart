@@ -699,7 +699,10 @@ class BrowserController extends ChangeNotifier {
   /// A media URL was seen on [t]. [element] = 'video' / 'audio' when it comes
   /// from a player on the page; [height] is the picture height if known.
   void addMedia(BrowserTab t, String url,
-      {String? element, int height = 0, String label = ''}) {
+      {String? element,
+      int height = 0,
+      String label = '',
+      bool hls = false}) {
     if (!captureMedia) return;
     if (!isCapturableMedia(url, fromMediaElement: element != null)) return;
     final ext = _extOf(url);
@@ -726,7 +729,7 @@ class BrowserController extends ChangeNotifier {
       if (changed) t.update(() {});
       return;
     }
-    if (ext == 'm3u8') {
+    if (ext == 'm3u8' || hls) {
       _addHls(t, url);
       return;
     }
