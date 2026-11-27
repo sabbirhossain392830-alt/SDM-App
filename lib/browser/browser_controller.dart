@@ -132,6 +132,7 @@ class BrowserController extends ChangeNotifier {
   bool blockAds = false;
   bool captureMedia = false;
   bool desktopMode = false;
+  bool darkPages = false;
   ThemeMode themeMode = ThemeMode.system;
 
   List<Shortcut> shortcuts = [];
@@ -172,6 +173,7 @@ class BrowserController extends ChangeNotifier {
     bubbleX = p.getDouble('b_bx') ?? 1.0;
     bubbleY = p.getDouble('b_by') ?? 0.72;
     desktopMode = p.getBool('b_desktop') ?? false;
+    darkPages = p.getBool('b_darkPages') ?? false;
     themeMode = ThemeMode.values.firstWhere(
       (m) => m.name == p.getString('b_theme'),
       orElse: () => ThemeMode.system,
@@ -240,6 +242,7 @@ class BrowserController extends ChangeNotifier {
     await p.setBool('b_blockAds', blockAds);
     await p.setBool('b_capture2', captureMedia);
     await p.setBool('b_desktop', desktopMode);
+    await p.setBool('b_darkPages', darkPages);
     await p.setString('b_theme', themeMode.name);
     await p.setString(
         'b_shortcuts', jsonEncode(shortcuts.map((e) => e.toJson()).toList()));
@@ -491,6 +494,31 @@ class BrowserController extends ChangeNotifier {
     blockAds = v;
     notifyListeners();
     await _applySettings(reloadPages: true);
+    await save();
+  }
+
+  /// Turns every page dark by inverting it; pictures and videos are turned
+  /// back so they keep their real colours.
+  static const darkOnJs = r'''
+(function(){
+  if(document.getElementById('__sdm_dark')) return;
+  var s=document.createElement('style'); s.id='__sdm_dark';
+  s.textContent='html{filter:invert(1) hue-rotate(180deg)!important;background:#fff}'
+   +'img,video,picture,canvas,iframe,[style*="background-image"]{filter:invert(1) hue-rotate(180deg)!important}';
+  (document.head||document.documentElement).appendChild(s);
+})()
+''';
+  static const darkOffJs =
+      "var e=document.getElementById('__sdm_dark'); if(e) e.remove();";
+
+  Future<void> setDarkPages(bool v) async {
+    darkPages = v;
+    notifyListeners();
+    for (final t in tabs) {
+      try {
+        await t.controller?.evaluateJavascript(source: v ? darkOnJs : darkOffJs);
+      } catch (_) {}
+    }
     await save();
   }
 

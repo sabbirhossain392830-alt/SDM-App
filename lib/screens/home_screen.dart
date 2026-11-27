@@ -38,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     dm.addListener(_rebuild);
+    dm.lowBattery.addListener(_onLowBattery);
     UpdateChecker.instance.addListener(_rebuild);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !widget.embedded) {
@@ -47,9 +48,24 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _onLowBattery() {
+    final n = dm.lowBattery.value;
+    if (n == null || !mounted) return;
+    dm.lowBattery.value = null;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 8),
+        content: Text(
+            '${tr('Battery is low')} ($n%). ${tr('A big download may stop if the phone switches off.')}'),
+      ));
+  }
+
   @override
   void dispose() {
     dm.removeListener(_rebuild);
+    dm.lowBattery.removeListener(_onLowBattery);
     UpdateChecker.instance.removeListener(_rebuild);
     super.dispose();
   }
@@ -482,7 +498,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
                       itemCount: items.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) => _tile(items[i]),
+                      itemBuilder: (_, i) => TweenAnimationBuilder<double>(
+                        key: ValueKey('t_${items[i].id}'),
+                        tween: Tween(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOutCubic,
+                        builder: (_, v, child) => Opacity(
+                          opacity: v,
+                          child: Transform.translate(
+                              offset: Offset(0, (1 - v) * 14), child: child),
+                        ),
+                        child: _tile(items[i]),
+                      ),
                     ),
             ),
           ),

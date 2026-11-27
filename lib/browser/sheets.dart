@@ -423,6 +423,12 @@ class BrowserSettingsScreen extends StatelessWidget {
               onChanged: browser.setBlockAds,
             ),
             SwitchListTile(
+              title: const T('Dark pages'),
+              subtitle: const T('Shows web pages with a dark background'),
+              value: browser.darkPages,
+              onChanged: browser.setDarkPages,
+            ),
+            SwitchListTile(
               title: const T('Desktop mode'),
               subtitle: const T('Request the desktop version of sites'),
               value: browser.desktopMode,

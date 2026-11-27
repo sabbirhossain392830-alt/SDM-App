@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.content.pm.PackageManager
 import java.security.MessageDigest
 import android.net.ConnectivityManager
@@ -142,6 +144,21 @@ class MainActivity : FlutterActivity() {
         MethodChannel(messenger, "drom/app").setMethodCallHandler { call, result ->
             when (call.method) {
                 "apkPath" -> result.success(ctx.packageCodePath)
+                "battery" -> {
+                    try {
+                        val i = ctx.registerReceiver(null,
+                            IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                        val level = i?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                        val scale = i?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+                        val st = i?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+                        val charging = st == BatteryManager.BATTERY_STATUS_CHARGING ||
+                            st == BatteryManager.BATTERY_STATUS_FULL
+                        val pct = if (level >= 0 && scale > 0) level * 100 / scale else -1
+                        result.success(mapOf("level" to pct, "charging" to charging))
+                    } catch (e: Exception) {
+                        result.success(mapOf("level" to -1, "charging" to false))
+                    }
+                }
                 "openFile" -> result.success(
                     openFileNative(ctx, call.argument<String>("path"), call.argument<String>("mime")))
                 // is this APK signed like the installed app? ("ok", "signature", "package", "invalid")

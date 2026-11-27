@@ -152,6 +152,7 @@ class _WebHostState extends State<_WebHost> {
         );
       },
       onLoadStart: (c, url) {
+        if (browser.darkPages) c.evaluateJavascript(source: BrowserController.darkOnJs);
         if (url != null) tab.setUrl(url.toString());
         tab.update(() {
           tab.isLoading = true;
@@ -183,6 +184,7 @@ class _WebHostState extends State<_WebHost> {
         browser.rememberIcon(tab.url, icon);
       },
       onLoadStop: (c, url) async {
+        if (browser.darkPages) c.evaluateJavascript(source: BrowserController.darkOnJs);
         if (url != null) tab.setUrl(url.toString());
         final title = await c.getTitle();
         if (title != null && title.isNotEmpty) tab.setTitle(title);
