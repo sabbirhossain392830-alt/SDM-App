@@ -7,10 +7,22 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'l10n.dart';
 import 'link_intake.dart' show rootNavigatorKey;
+import 'player/player_screen.dart' show isPlayable, playInSdm;
 
 /// Opens a finished download with the phone's own app for that file type.
 /// When it cannot be opened, says why instead of doing nothing.
 Future<void> openDownloaded(String path) async {
+  // videos and songs play in SDM's own player; if it cannot play a file, the
+  // player offers "Open in another player"
+  if (isPlayable(path) && File(path).existsSync()) {
+    await playInSdm(path);
+    return;
+  }
+  await openExternal(path);
+}
+
+/// Opens the file with another app on the phone.
+Future<void> openExternal(String path) async {
   void say(String text) {
     final ctx = rootNavigatorKey.currentContext;
     if (ctx == null) return;

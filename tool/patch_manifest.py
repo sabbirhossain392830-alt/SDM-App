@@ -98,6 +98,10 @@ if 'android:scheme="https"' not in xml:
     )
     xml = xml.replace("</activity>", view_filter + "    </activity>", 1)
 
+# The video player can shrink into a small floating window (picture in picture).
+if "supportsPictureInPicture" not in xml:
+    xml = xml.replace("<activity", '<activity android:supportsPictureInPicture="true"', 1)
+
 # Foreground service that keeps downloads alive in the background.
 if "DownloadService" not in xml:
     service = (
