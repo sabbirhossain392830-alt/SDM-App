@@ -111,6 +111,43 @@ Future<GeolocationPermissionShowPromptResponse> pageLocation(
       origin: origin, allow: yes == true, retain: false);
 }
 
+/// Hosts the user chose to open despite a certificate problem (this run only).
+final Set<String> _trustedHosts = {};
+
+/// Like Chrome's "Your connection is not private": stop, explain, and let the
+/// user go back (default) or continue at their own risk.
+Future<ServerTrustAuthResponse> pageSslError(
+    BuildContext context, URLAuthenticationChallenge c) async {
+  final host = c.protectionSpace.host;
+  if (_trustedHosts.contains(host)) {
+    return ServerTrustAuthResponse(action: ServerTrustAuthResponseAction.PROCEED);
+  }
+  final proceed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.gpp_maybe_rounded, color: Colors.red, size: 36),
+      title: Text(tr('Your connection is not private'),
+          style: const TextStyle(fontSize: 17)),
+      content: Text(
+          '$host\n\n${tr("This site's security certificate cannot be trusted. Others on the network may be able to see what you send.")}'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('Continue anyway'))),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('Go back'))),
+      ],
+    ),
+  );
+  if (proceed == true) _trustedHosts.add(host);
+  return ServerTrustAuthResponse(
+      action: proceed == true
+          ? ServerTrustAuthResponseAction.PROCEED
+          : ServerTrustAuthResponseAction.CANCEL);
+}
+
 Future<HttpAuthResponse> pageLogin(
     BuildContext context, URLAuthenticationChallenge c) async {
   final user = TextEditingController();
