@@ -105,6 +105,26 @@ class DownloadManager extends ChangeNotifier {
 
   // Wi-Fi only: when ON, downloads run only on Wi-Fi / Ethernet.
   static const MethodChannel _net = MethodChannel('drom/net');
+
+  /// Set (to the battery percent) when a big download runs on a low battery.
+  /// The home screen shows the warning once.
+  final ValueNotifier<int?> lowBattery = ValueNotifier<int?>(null);
+  bool _batteryWarned = false;
+
+  Future<void> _checkBattery(DownloadItem item) async {
+    if (_batteryWarned || !Platform.isAndroid) return;
+    if (item.total > 0 && item.total < 150 * 1024 * 1024) return; // small file
+    try {
+      final r = await const MethodChannel('drom/app')
+          .invokeMapMethod<String, dynamic>('battery');
+      final level = (r?['level'] as int?) ?? -1;
+      final charging = r?['charging'] == true;
+      if (level >= 0 && level <= 15 && !charging) {
+        _batteryWarned = true;
+        lowBattery.value = level;
+      }
+    } catch (_) {}
+  }
   bool wifiOnly = false;
   final Set<String> _waitingForWifi = {};
   Timer? _wifiTimer;
@@ -922,12 +942,14 @@ class DownloadManager extends ChangeNotifier {
       if (dt <= 0) return;
       final cur = item.downloaded;
       final inst = (cur - last) / dt;
-      item.speed = item.speed == 0 ? inst : item.speed * 0.6 + inst * 0.4;
+      // smoother: one slow moment no longer makes the speed and the time left jump
+      item.speed = item.speed == 0 ? inst : item.speed * 0.8 + inst * 0.2;
       run.speed = item.speed;
       last = cur;
       lastTime = now;
       notifyListeners();
       if (++save % 10 == 0) _save();
+      if (save % 120 == 1) _checkBattery(item);
     });
   }
 
