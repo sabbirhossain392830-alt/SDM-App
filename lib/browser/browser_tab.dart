@@ -62,12 +62,19 @@ class BrowserTab extends ChangeNotifier {
     this.windowId,
     String title = '',
     bool showHome = true,
+    this.incognito = false,
   })  : pendingUrl = url,
         _url = url ?? '',
         _title = title,
         _showHome = showHome && windowId == null;
 
   final String id;
+
+  /// Private tab: no history, not restored next time, no cache.
+  final bool incognito;
+
+  /// Set when an http link was opened as https; if https fails, http is used.
+  String? upgradedFrom;
 
   /// Set when the tab was opened by a page (target=_blank / window.open).
   int? windowId;

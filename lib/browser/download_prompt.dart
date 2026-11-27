@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -45,6 +47,20 @@ String _typeLabel(String name, String? mime) {
     return mime;
   }
   return 'File';
+}
+
+/// Characters a file name cannot hold on Android storage.
+String _cleanName(String n) =>
+    n.replaceAll(RegExp(r'[\\/:*?"<>|\n\r\t]'), '_').trim();
+
+const _riskyExt = {
+  'apk', 'xapk', 'apks', 'exe', 'msi', 'bat', 'cmd', 'scr', 'jar', 'vbs',
+  'js', 'sh', 'com', 'pif', 'dmg',
+};
+
+bool _isRisky(String name) {
+  final e = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+  return _riskyExt.contains(e);
 }
 
 /// Quick save locations shown as chips in the popup.
@@ -265,7 +281,13 @@ class _PromptSheetState extends State<_PromptSheet> {
   }
 
   Future<void> _start() async {
-    final name = _nameCtrl.text.trim();
+    var name = _cleanName(_nameCtrl.text);
+    // a name typed without its extension keeps the real one (.mp4, .zip ...)
+    if (name.isNotEmpty && !_looksLikeFileName(name)) {
+      final real = _info?.fileName ?? _guessName(widget.req.url);
+      final ext = _looksLikeFileName(real) ? real.split('.').last : '';
+      if (ext.isNotEmpty) name = '$name.$ext';
+    }
     if (name.isEmpty) {
       setState(() => _error = 'Enter a file name');
       return;
@@ -435,6 +457,14 @@ class _PromptSheetState extends State<_PromptSheet> {
                       index: 3,
                       child: _saveSection(cs),
                     ),
+                    if (_isRisky(name))
+                      _note(cs,
+                          'This file can harm your phone. Install only if you trust the source.',
+                          warn: true),
+                    if (_exists(name))
+                      _note(cs,
+                          'A file with this name exists. This one is saved as a new copy.',
+                          warn: true),
                     if (isPage)
                       _note(cs,
                           'This link returns a web page, not a downloadable file.'),
@@ -572,6 +602,8 @@ class _PromptSheetState extends State<_PromptSheet> {
                     minLines: 1,
                     maxLines: null,
                     onChanged: (_) => setState(() => _nameEdited = true),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => setState(() => _editing = false),
                     decoration: InputDecoration(
                       labelText: tr('File name'),
                       isDense: true,
@@ -750,19 +782,34 @@ class _PromptSheetState extends State<_PromptSheet> {
     );
   }
 
-  Widget _note(ColorScheme cs, String text) => Padding(
+  /// True when the chosen folder already holds a file with this name.
+  bool _exists(String name) {
+    final d = _effectiveDir;
+    if (d == null || name.trim().isEmpty) return false;
+    try {
+      return File('$d/${_cleanName(name)}').existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Widget _note(ColorScheme cs, String text, {bool warn = false}) {
+    final col = warn ? const Color(0xFFD97706) : cs.error;
+    return Padding(
         padding: const EdgeInsets.only(top: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.error_outline_rounded, size: 18, color: cs.error),
+            Icon(warn ? Icons.warning_amber_rounded : Icons.error_outline_rounded,
+                size: 18, color: col),
             const SizedBox(width: 6),
             Expanded(
                 child: Text(tr(text),
-                    style: TextStyle(color: cs.error, fontSize: 13))),
+                    style: TextStyle(color: col, fontSize: 13))),
           ],
         ),
       );
+  }
 }
 
 /// Fades and slides a section up a little, one after another, once the popup

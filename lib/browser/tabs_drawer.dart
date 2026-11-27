@@ -116,6 +116,14 @@ class _TabsDrawerState extends State<TabsDrawer> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
         ),
         IconButton(
+          tooltip: tr('New Incognito Tab'),
+          icon: const Icon(Icons.visibility_off_outlined),
+          onPressed: () {
+            b.newTab(incognito: true);
+            widget.onClose();
+          },
+        ),
+        IconButton(
           tooltip: tr('Search tabs'),
           icon: const Icon(Icons.search_rounded),
           onPressed: () => setState(() => _searching = true),
@@ -285,7 +293,9 @@ class _TabTile extends StatelessWidget {
         color: cs.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: fav != null && fav.isNotEmpty
+      child: tab.incognito
+          ? Icon(Icons.visibility_off_rounded, size: 18, color: cs.primary)
+          : fav != null && fav.isNotEmpty
           ? ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: Image.memory(fav,

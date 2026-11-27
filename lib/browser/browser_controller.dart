@@ -151,6 +151,11 @@ class BrowserController extends ChangeNotifier {
   bool captureMedia = false;
   bool desktopMode = false;
   bool darkPages = false;
+  bool dataSaver = false;
+  bool httpsUpgrade = true;
+
+  /// Hosts where https did not work: they stay on http.
+  final Set<String> _noUpgrade = {};
   ThemeMode themeMode = ThemeMode.system;
 
   List<Shortcut> shortcuts = [];
@@ -192,6 +197,8 @@ class BrowserController extends ChangeNotifier {
     bubbleY = p.getDouble('b_by') ?? 0.72;
     desktopMode = p.getBool('b_desktop') ?? false;
     darkPages = p.getBool('b_darkPages') ?? false;
+    dataSaver = p.getBool('b_dataSaver') ?? false;
+    httpsUpgrade = p.getBool('b_httpsUp') ?? true;
     themeMode = ThemeMode.values.firstWhere(
       (m) => m.name == p.getString('b_theme'),
       orElse: () => ThemeMode.system,
@@ -261,6 +268,8 @@ class BrowserController extends ChangeNotifier {
     await p.setBool('b_capture2', captureMedia);
     await p.setBool('b_desktop', desktopMode);
     await p.setBool('b_darkPages', darkPages);
+    await p.setBool('b_dataSaver', dataSaver);
+    await p.setBool('b_httpsUp', httpsUpgrade);
     await p.setString('b_theme', themeMode.name);
     await p.setString(
         'b_shortcuts', jsonEncode(shortcuts.map((e) => e.toJson()).toList()));
@@ -295,8 +304,9 @@ class BrowserController extends ChangeNotifier {
   Future<void> saveTabs() async {
     final p = _prefs;
     if (p == null) return;
-    await p.setString('b_tabs', jsonEncode(tabs.map((t) => t.toJson()).toList()));
-    await p.setInt('b_active', active);
+    await p.setString('b_tabs', jsonEncode(
+        tabs.where((t) => !t.incognito).map((t) => t.toJson()).toList()));
+    await p.setInt('b_active', active.clamp(0, tabs.length - 1));
   }
 
   // ---------------------------------------------------------------- tabs
@@ -304,11 +314,13 @@ class BrowserController extends ChangeNotifier {
   /// True while the browser screen is on the navigation stack.
   bool screenOpen = false;
 
-  BrowserTab newTab({String? url, int? windowId, bool activate = true}) {
+  BrowserTab newTab(
+      {String? url, int? windowId, bool activate = true, bool incognito = false}) {
     final t = BrowserTab(
       id: _nextId(),
       url: url,
       windowId: windowId,
+      incognito: incognito,
       showHome: url == null && windowId == null,
     );
     if (url != null) t.wantsWebView = true;
@@ -330,7 +342,7 @@ class BrowserController extends ChangeNotifier {
   void closeTab(int i) {
     if (i < 0 || i >= tabs.length) return;
     final t = tabs.removeAt(i);
-    if (!t.showHome && t.url.startsWith('http')) {
+    if (!t.incognito && !t.showHome && t.url.startsWith('http')) {
       closedUrls.add(t.url);
       if (closedUrls.length > 10) closedUrls.removeAt(0);
     }
@@ -342,6 +354,7 @@ class BrowserController extends ChangeNotifier {
     } else if (active >= tabs.length) {
       active = tabs.length - 1;
     }
+    if (t.incognito && !tabs.any((x) => x.incognito)) _forgetIncognito();
     // dispose after the frame so the WebView widget can be removed first
     WidgetsBinding.instance.addPostFrameCallback((_) => t.dispose());
     saveTabs();
@@ -386,8 +399,13 @@ class BrowserController extends ChangeNotifier {
 
   Future<void> navigate(String input, {BrowserTab? tab}) async {
     final t = tab ?? current;
-    final url = resolveInput(input);
+    var url = resolveInput(input);
     if (url.isEmpty) return;
+    final up = upgradeUrl(url);
+    if (up != null) {
+      t.upgradedFrom = url;
+      url = up;
+    }
     t.error = null;
     t.setShowHome(false);
     final c = t.controller;
@@ -455,7 +473,10 @@ class BrowserController extends ChangeNotifier {
 
   // ------------------------------------------------------------ settings
 
-  InAppWebViewSettings webSettings() => InAppWebViewSettings(
+  InAppWebViewSettings webSettings({bool incognito = false}) => InAppWebViewSettings(
+        // private tabs keep nothing on the phone
+        cacheMode: incognito ? CacheMode.LOAD_NO_CACHE : CacheMode.LOAD_DEFAULT,
+        saveFormData: !incognito,
         javaScriptEnabled: true,
         useOnDownloadStart: true,
         useShouldOverrideUrlLoading: true,
@@ -473,6 +494,7 @@ class BrowserController extends ChangeNotifier {
         mixedContentMode: MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
         thirdPartyCookiesEnabled: true,
         domStorageEnabled: true,
+        blockNetworkImage: dataSaver,
         preferredContentMode: desktopMode
             ? UserPreferredContentMode.DESKTOP
             : UserPreferredContentMode.RECOMMENDED,
@@ -497,12 +519,11 @@ class BrowserController extends ChangeNotifier {
       );
 
   Future<void> _applySettings({bool reloadPages = false}) async {
-    final s = webSettings();
     for (final t in tabs) {
       final c = t.controller;
       if (c == null) continue;
       try {
-        await c.setSettings(settings: s);
+        await c.setSettings(settings: webSettings(incognito: t.incognito));
         if (reloadPages && !t.showHome) await c.reload();
       } catch (_) {}
     }
@@ -539,6 +560,174 @@ class BrowserController extends ChangeNotifier {
     }
     await save();
   }
+
+  Future<void> setDataSaver(bool v) async {
+    dataSaver = v;
+    notifyListeners();
+    await _applySettings(reloadPages: true);
+    await save();
+  }
+
+  Future<void> setHttpsUpgrade(bool v) async {
+    httpsUpgrade = v;
+    notifyListeners();
+    await save();
+  }
+
+  // ------------------------------------------------------- https upgrade
+
+  /// The https version of an http address, or null when it should stay as it
+  /// is (switched off, not http, local network, or https failed there before).
+  String? upgradeUrl(String url) {
+    if (!httpsUpgrade || !url.startsWith('http://')) return null;
+    final h = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+    if (h.isEmpty || h == 'localhost' || h.endsWith('.local')) return null;
+    if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(h) || h.contains(':')) {
+      return null;
+    }
+    if (_noUpgrade.contains(h)) return null;
+    return 'https://${url.substring(7)}';
+  }
+
+  /// https did not load for this tab: go back to the plain http address.
+  Future<bool> fallbackToHttp(BrowserTab t) async {
+    final from = t.upgradedFrom;
+    if (from == null) return false;
+    t.upgradedFrom = null;
+    final h = Uri.tryParse(from)?.host.toLowerCase() ?? '';
+    if (h.isNotEmpty) _noUpgrade.add(h);
+    t.error = null;
+    t.setUrl(from);
+    try {
+      await t.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(from)));
+    } catch (_) {
+      return false;
+    }
+    return true;
+  }
+
+  // ----------------------------------------------------------- incognito
+
+  /// Sites first opened in a private tab: they had no cookies before, so
+  /// their cookies are removed when the last private tab closes. (Android has
+  /// one cookie jar for all tabs, so sites already signed in stay as they are.)
+  final Set<String> _incoFresh = {};
+  final Set<String> _incoSeen = {};
+
+  Future<void> noteIncognitoPage(String url) async {
+    final u = Uri.tryParse(url);
+    if (u == null || !u.scheme.startsWith('http') || u.host.isEmpty) return;
+    if (!_incoSeen.add(u.host)) return;
+    try {
+      final c = await CookieManager.instance().getCookies(url: WebUri(url));
+      if (c.isEmpty) _incoFresh.add(u.host);
+    } catch (_) {}
+  }
+
+  Future<void> _forgetIncognito() async {
+    final hosts = _incoFresh.toList();
+    _incoFresh.clear();
+    _incoSeen.clear();
+    final cm = CookieManager.instance();
+    for (final h in hosts) {
+      try {
+        final url = WebUri('https://$h/');
+        final list = await cm.getCookies(url: url);
+        for (final c in list) {
+          await cm.deleteCookie(
+              url: url, name: c.name, domain: c.domain, path: c.path ?? '/');
+        }
+      } catch (_) {}
+    }
+  }
+
+  // --------------------------------------------------------- reader mode
+
+  /// Turns the open page into a clean reading view (title, text, pictures).
+  /// Returns false when the page has no article to show.
+  Future<bool> readerMode() async {
+    final c = current.controller;
+    if (c == null || current.showHome) return false;
+    try {
+      final r = await c.evaluateJavascript(source: readerJs);
+      return r == true || r == 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static const readerJs = r'''
+(function(){
+  if (document.getElementById('sdm-reader')) return true;
+  function score(e){
+    var ps = e.querySelectorAll('p'), n = 0;
+    for (var i=0;i<ps.length;i++){ var t=(ps[i].innerText||'').trim(); if (t.length>60) n += t.length; }
+    return n;
+  }
+  var best=null, bs=0, mx=0, sc=[];
+  var cands = document.querySelectorAll('article, main, [role=main], section, div');
+  for (var i=0;i<cands.length;i++){ sc[i]=score(cands[i]); if(sc[i]>mx) mx=sc[i]; }
+  // outer blocks come first in the page: the last one that still holds most
+  // of the text is the innermost, i.e. the article itself
+  for (var j=0;j<cands.length;j++){ if (sc[j]>=mx*0.85){best=cands[j];bs=sc[j];} }
+  if(!best||bs<300) return false;
+  var skip=/^(SCRIPT|STYLE|NAV|FOOTER|ASIDE|FORM|IFRAME|BUTTON|NOSCRIPT|SVG|HEADER)$/;
+  var out=document.createElement('div');
+  function walk(n){
+    for (var k=n.firstChild;k;k=k.nextSibling){
+      if (k.nodeType!==1) continue;
+      var tg=k.tagName;
+      if (skip.test(tg)) continue;
+      if (/^(P|H1|H2|H3|H4|BLOCKQUOTE|UL|OL|PRE|FIGURE)$/.test(tg)){
+        var t=(k.innerText||'').trim();
+        if (!t && !k.querySelector('img')) continue;
+        var c=k.cloneNode(true);
+        c.querySelectorAll('script,style,iframe,button,form,svg').forEach(function(x){x.remove();});
+        c.removeAttribute('style'); c.removeAttribute('class'); c.removeAttribute('id');
+        out.appendChild(c);
+      } else if (tg==='IMG'){
+        var src=k.currentSrc||k.src; if(src&&(k.naturalWidth||k.width)>120){var im=document.createElement('img');im.src=src;out.appendChild(im);}
+      } else walk(k);
+    }
+  }
+  walk(best);
+  if (out.innerText.trim().length<200) return false;
+  var title=(document.title||'').trim();
+  var h1=document.querySelector('h1'); if(h1&&h1.innerText.trim().length>5) title=h1.innerText.trim();
+  var themes=[['#ffffff','#1a1a1a','#2563eb'],['#f4ecd8','#3b2f1e','#9a5b13'],['#121212','#d8d8d8','#7fb2ff']];
+  var ti=0, fs=19;
+  var root=document.createElement('div'); root.id='sdm-reader';
+  var st=document.createElement('style');
+  function css(){
+    var t=themes[ti];
+    st.textContent='html,body{margin:0!important;padding:0!important;background:'+t[0]+'!important}'+
+    '#sdm-reader{position:absolute;left:0;top:0;width:100%;min-height:100%;box-sizing:border-box;background:'+t[0]+';color:'+t[1]+';z-index:2147483647;padding:0 0 60px;font-family:Georgia,serif}'+
+    '#sdm-reader .bar{position:sticky;top:0;display:flex;gap:8px;justify-content:flex-end;padding:8px 12px;background:'+t[0]+';border-bottom:1px solid '+t[1]+'22}'+
+    '#sdm-reader .bar button{font:600 15px sans-serif;border:1px solid '+t[1]+'44;background:transparent;color:'+t[1]+';border-radius:10px;padding:6px 12px}'+
+    '#sdm-reader .body{max-width:720px;margin:0 auto;padding:12px 18px;font-size:'+fs+'px;line-height:1.7;word-wrap:break-word}'+
+    '#sdm-reader h1{font-size:1.5em;line-height:1.25;margin:.6em 0}'+
+    '#sdm-reader h2,#sdm-reader h3{line-height:1.3}'+
+    '#sdm-reader img{max-width:100%;height:auto;border-radius:8px;margin:.5em 0;display:block}'+
+    '#sdm-reader a{color:'+t[2]+'}'+
+    '#sdm-reader blockquote{border-left:3px solid '+t[2]+';margin:1em 0;padding-left:14px;opacity:.85}'+
+    '#sdm-reader pre{overflow:auto;background:'+t[1]+'14;padding:10px;border-radius:8px}';
+  }
+  function btn(l,f){var b=document.createElement('button');b.textContent=l;b.onclick=f;return b;}
+  var bar=document.createElement('div'); bar.className='bar';
+  bar.appendChild(btn('A−',function(){fs=Math.max(13,fs-2);css();}));
+  bar.appendChild(btn('A+',function(){fs=Math.min(34,fs+2);css();}));
+  bar.appendChild(btn('◐',function(){ti=(ti+1)%themes.length;css();}));
+  bar.appendChild(btn('✕',function(){location.reload();}));
+  var body=document.createElement('div'); body.className='body';
+  var h=document.createElement('h1'); h.textContent=title; body.appendChild(h);
+  body.appendChild(out);
+  root.appendChild(st); root.appendChild(bar); root.appendChild(body);
+  css();
+  document.body.appendChild(root);
+  window.scrollTo(0,0);
+  return true;
+})()
+''';
 
   Future<void> setDesktopMode(bool v) async {
     desktopMode = v;
@@ -613,6 +802,7 @@ class BrowserController extends ChangeNotifier {
   }
 
   void addHistory(BrowserTab t) {
+    if (t.incognito) return;
     final u = t.url;
     if (u.isEmpty || !(u.startsWith('http://') || u.startsWith('https://'))) {
       return;
