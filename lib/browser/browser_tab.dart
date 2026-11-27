@@ -21,6 +21,9 @@ class MediaEntry {
   bool live;
   bool separateAudio; // video whose sound is a separate stream
   String label;
+
+  /// Referer that worked when the playlist was read ('' = none, null = page).
+  String? referer;
   bool sizeAsked = false;
 
   MediaEntry(
@@ -35,6 +38,7 @@ class MediaEntry {
     this.live = false,
     this.separateAudio = false,
     this.label = '',
+    this.referer,
   });
 
   bool get downloadable => !encrypted && !live;
@@ -77,6 +81,9 @@ class BrowserTab extends ChangeNotifier {
   /// Tabs restored from the last session keep their address but get a WebView
   /// only when first opened: the app starts faster and uses less memory.
   bool activated = false;
+
+  /// The WebView's own User-Agent, asked once (used when fetching its media).
+  String? userAgent;
 
   InAppWebViewController? controller;
   FindInteractionController? findController;
