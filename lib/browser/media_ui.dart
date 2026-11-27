@@ -205,7 +205,8 @@ Future<void> showMediaSheet(
         onDownload(DownloadRequest(
           url: e.url,
           fileName: _fileNameFor(tab, e),
-          referer: tab.url,
+          referer: e.referer == '' ? null : (e.referer ?? tab.url),
+          userAgent: tab.userAgent,
         ));
       },
     ),

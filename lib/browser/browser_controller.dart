@@ -671,10 +671,22 @@ class BrowserController extends ChangeNotifier {
         fromMediaElement;
   }
 
+  Future<String?> _userAgentOf(BrowserTab t) async {
+    if (t.userAgent != null) return t.userAgent;
+    try {
+      final r = await t.controller?.evaluateJavascript(source: 'navigator.userAgent');
+      if (r is String && r.isNotEmpty) t.userAgent = r;
+    } catch (_) {}
+    return t.userAgent;
+  }
+
   /// Headers a site expects for its media (page as referer, cookies).
   Future<Map<String, String>> pageHeaders(BrowserTab t, String url) async {
     final h = <String, String>{};
     if (t.url.startsWith('http')) h['Referer'] = t.url;
+    // streams are often only handed to the browser they were opened in
+    final ua = await _userAgentOf(t);
+    if (ua != null && ua.isNotEmpty) h['User-Agent'] = ua;
     try {
       final cookies = await CookieManager.instance().getCookies(url: WebUri(url));
       if (cookies.isNotEmpty) {
@@ -738,7 +750,30 @@ class BrowserController extends ChangeNotifier {
     try {
       final dm = DownloadManager.instance;
       final headers = await pageHeaders(t, url);
-      final text = await dm.fetchText(url, headers: headers);
+      // the player may sit in a frame of another site: if the page address is
+      // refused as Referer, try the stream's own site, then none
+      final origin = Uri.parse(url).origin;
+      final tries = <Map<String, String>>[
+        headers,
+        {...headers, 'Referer': '$origin/', 'Origin': origin},
+        {...headers}..remove('Referer'),
+      ];
+      String? text;
+      String? okReferer; // '' = none
+      Object? lastError;
+      for (final h in tries) {
+        try {
+          text = await dm.fetchText(url, headers: h);
+          if (text.contains('#EXTM3U')) {
+            okReferer = h['Referer'] ?? '';
+            break;
+          }
+          text = null;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      if (text == null) throw lastError ?? 'not a playlist';
       final base = Uri.parse(url);
       t.media.remove(marker);
       if (isMasterPlaylist(text)) {
@@ -747,6 +782,7 @@ class BrowserController extends ChangeNotifier {
           if (t.media.any((e) => e.url == v.url.toString())) continue;
           t.media.add(MediaEntry(v.url.toString(),
               hls: true,
+              referer: okReferer,
               height: v.height,
               bandwidth: v.bandwidth,
               separateAudio: v.separateAudio));
@@ -754,7 +790,7 @@ class BrowserController extends ChangeNotifier {
         for (final a in m.audios) {
           if (t.media.any((e) => e.url == a.url.toString())) continue;
           t.media.add(MediaEntry(a.url.toString(),
-              hls: true, audio: true, label: a.name));
+              hls: true, audio: true, label: a.name, referer: okReferer));
         }
       } else {
         final m = parseMedia(text, base);
@@ -764,6 +800,7 @@ class BrowserController extends ChangeNotifier {
         }
         t.media.add(MediaEntry(url,
             hls: true,
+            referer: okReferer,
             seconds: m.seconds,
             encrypted: m.encrypted,
             live: m.live,
