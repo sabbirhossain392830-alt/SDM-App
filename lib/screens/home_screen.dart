@@ -250,6 +250,12 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (d.status == DlStatus.completed)
+              ListTile(
+                leading: const Icon(Icons.open_in_new_rounded),
+                title: const T('Open in another app'),
+                onTap: () => Navigator.pop(ctx, 'external'),
+              ),
             ListTile(
               leading: const Icon(Icons.refresh_rounded),
               title: const T('Redownload'),
@@ -283,6 +289,8 @@ class _HomeScreenState extends State<HomeScreen> {
             behavior: SnackBarBehavior.floating,
             content: T('Link copied')));
       }
+    } else if (choice == 'external') {
+      await openExternal(d.savePath);
     } else if (choice == 'redo') {
       await _redownload(d);
     } else if (choice == 'remove') {

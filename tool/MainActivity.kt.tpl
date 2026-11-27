@@ -11,6 +11,9 @@ import java.security.MessageDigest
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
+import android.app.PictureInPictureParams
+import android.util.Rational
+import android.view.WindowManager
 import android.os.Bundle
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
@@ -69,6 +72,10 @@ class MainActivity : FlutterActivity() {
 
         private var shareChannel: MethodChannel? = null
         private var notifyChannel: MethodChannel? = null
+        private var playerChannel: MethodChannel? = null
+
+        @Volatile
+        var current: MainActivity? = null
 
         @Volatile
         private var pending: String? = null
@@ -78,6 +85,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        current = this
         val existed = FlutterEngineCache.getInstance().contains(ENGINE_ID)
         if (!existed) createEngine()
         super.onCreate(savedInstanceState)
@@ -95,6 +103,19 @@ class MainActivity : FlutterActivity() {
                 if (existed) shareChannel?.invokeMethod("onOpen", open) else pendingOpen = open
             }
         }
+    }
+
+    override fun onDestroy() {
+        if (current === this) current = null
+        super.onDestroy()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        playerChannel?.invokeMethod("pip", isInPictureInPictureMode)
     }
 
     override fun getCachedEngineId(): String = ENGINE_ID
@@ -166,6 +187,68 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // Video player: screen brightness, phone volume, keep screen on, PiP.
+        val player = MethodChannel(messenger, "drom/player")
+        player.setMethodCallHandler { call, result ->
+            val a = current
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            try {
+                when (call.method) {
+                    "getBrightness" -> {
+                        var b = a?.window?.attributes?.screenBrightness ?: -1f
+                        if (b < 0f) {
+                            b = try {
+                                Settings.System.getInt(ctx.contentResolver,
+                                    Settings.System.SCREEN_BRIGHTNESS) / 255f
+                            } catch (e: Exception) { 0.5f }
+                        }
+                        result.success(b.toDouble())
+                    }
+                    "setBrightness" -> {
+                        val v = (call.arguments as? Number)?.toFloat() ?: -1f
+                        a?.runOnUiThread {
+                            val lp = a.window.attributes
+                            lp.screenBrightness = v
+                            a.window.attributes = lp
+                        }
+                        result.success(true)
+                    }
+                    "getVolume" -> {
+                        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                        val cur = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                        result.success(if (max > 0) cur.toDouble() / max else 0.5)
+                    }
+                    "setVolume" -> {
+                        val v = (call.arguments as? Number)?.toDouble() ?: 0.5
+                        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC,
+                            Math.round(v * max).toInt(), 0)
+                        result.success(true)
+                    }
+                    "keepOn" -> {
+                        val on = call.arguments == true
+                        a?.runOnUiThread {
+                            if (on) a.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            else a.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                        result.success(true)
+                    }
+                    "pip" -> {
+                        if (a != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            a.enterPictureInPictureMode(
+                                PictureInPictureParams.Builder()
+                                    .setAspectRatio(Rational(16, 9)).build())
+                            result.success(true)
+                        } else result.success(false)
+                    }
+                    else -> result.notImplemented()
+                }
+            } catch (e: Exception) {
+                result.success(false)
+            }
+        }
+        playerChannel = player
 
         // Download notifications + foreground service.
         val notify = MethodChannel(messenger, "drom/notify")
