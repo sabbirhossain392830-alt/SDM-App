@@ -429,6 +429,18 @@ class BrowserSettingsScreen extends StatelessWidget {
               onChanged: browser.setDarkPages,
             ),
             SwitchListTile(
+              title: const T('Data saver (no images)'),
+              subtitle: const T('Loads pages without pictures to save data'),
+              value: browser.dataSaver,
+              onChanged: browser.setDataSaver,
+            ),
+            SwitchListTile(
+              title: const T('Secure connection (HTTPS)'),
+              subtitle: const T('Opens http sites as https when the site supports it'),
+              value: browser.httpsUpgrade,
+              onChanged: browser.setHttpsUpgrade,
+            ),
+            SwitchListTile(
               title: const T('Desktop mode'),
               subtitle: const T('Request the desktop version of sites'),
               value: browser.desktopMode,

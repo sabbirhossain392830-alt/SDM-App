@@ -170,6 +170,8 @@ class _MenuBody extends StatelessWidget {
               ),
               const Divider(height: 1),
               item(Icons.add_box_outlined, 'New Tab', () => browser.newTab()),
+              item(Icons.visibility_off_outlined, 'New Incognito Tab',
+                  () => browser.newTab(incognito: true)),
               if (browser.closedUrls.isNotEmpty)
                 item(Icons.restore_page_outlined, 'Reopen Closed Tab',
                     browser.reopenClosedTab),
@@ -190,6 +192,20 @@ class _MenuBody extends StatelessWidget {
               item(Icons.graphic_eq_rounded, 'Capture Audio/Video',
                   () => browser.setCaptureMedia(!browser.captureMedia),
                   checked: browser.captureMedia, keepOpen: true),
+              if (onPage)
+                item(Icons.chrome_reader_mode_outlined, 'Reader mode', () async {
+                  final ok = await browser.readerMode();
+                  if (!ok) {
+                    messenger?.showSnackBar(SnackBar(
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 2),
+                      content: Text(tr('No article found on this page')),
+                    ));
+                  }
+                }),
+              item(Icons.image_not_supported_outlined, 'Data saver (no images)',
+                  () => browser.setDataSaver(!browser.dataSaver),
+                  checked: browser.dataSaver, keepOpen: true),
               item(Icons.list_alt_rounded, 'View Page Resources',
                   actions.onResources),
               item(Icons.history_rounded, 'History', actions.onHistory),

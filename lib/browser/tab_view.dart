@@ -130,9 +130,9 @@ class _WebHostState extends State<_WebHost> {
       windowId: tab.windowId,
       pullToRefreshController: _pull,
       initialUrlRequest: (!usePopupWindow && tab.pendingUrl != null)
-          ? URLRequest(url: WebUri(tab.pendingUrl!))
+          ? URLRequest(url: WebUri(_startUrl()))
           : null,
-      initialSettings: browser.webSettings(),
+      initialSettings: browser.webSettings(incognito: tab.incognito),
       findInteractionController: tab.findController,
       initialUserScripts: UnmodifiableListView<UserScript>([
         UserScript(
@@ -155,6 +155,9 @@ class _WebHostState extends State<_WebHost> {
       onLoadStart: (c, url) {
         if (browser.darkPages) c.evaluateJavascript(source: BrowserController.darkOnJs);
         if (url != null) tab.setUrl(url.toString());
+        if (tab.incognito && url != null) {
+          browser.noteIncognitoPage(url.toString());
+        }
         tab.update(() {
           tab.isLoading = true;
           tab.progress = 5;
@@ -187,6 +190,7 @@ class _WebHostState extends State<_WebHost> {
       onLoadStop: (c, url) async {
         if (browser.darkPages) c.evaluateJavascript(source: BrowserController.darkOnJs);
         if (url != null) tab.setUrl(url.toString());
+        tab.upgradedFrom = null; // the https page loaded fine
         final title = await c.getTitle();
         if (title != null && title.isNotEmpty) tab.setTitle(title);
         tab.update(() {
@@ -207,6 +211,11 @@ class _WebHostState extends State<_WebHost> {
         _pull.endRefreshing();
         final d = error.description;
         if (d.contains('ERR_ABORTED')) return; // e.g. a download took over
+        // https did not work on this site: use the http address instead
+        if (tab.upgradedFrom != null) {
+          browser.fallbackToHttp(tab);
+          return;
+        }
         tab.update(() {
           tab.error = d.isEmpty ? 'The page could not be loaded' : d;
           tab.isLoading = false;
@@ -236,6 +245,15 @@ class _WebHostState extends State<_WebHost> {
               browser.isAdHost(uri.host)) {
             return NavigationActionPolicy.CANCEL;
           }
+          // http links open as https; if that fails the page falls back to http
+          if (action.isForMainFrame && scheme == 'http') {
+            final up = browser.upgradeUrl(u.toString());
+            if (up != null) {
+              tab.upgradedFrom = u.toString();
+              c.loadUrl(urlRequest: URLRequest(url: WebUri(up)));
+              return NavigationActionPolicy.CANCEL;
+            }
+          }
           if ((action.isForMainFrame) && uri != null && _looksLikeFile(uri)) {
             widget.onDownload(DownloadRequest(
               url: u.toString(),
@@ -255,7 +273,7 @@ class _WebHostState extends State<_WebHost> {
         // a page that opens windows by itself (ad pop-ups) gets none; links the
         // person taps (target=_blank) still open in a new tab
         if (action.hasGesture == false) return false;
-        browser.newTab(windowId: action.windowId);
+        browser.newTab(windowId: action.windowId, incognito: tab.incognito);
         return true;
       },
       onCloseWindow: (c) => browser.closeTabById(tab.id),
@@ -313,6 +331,15 @@ class _WebHostState extends State<_WebHost> {
         }
       },
     );
+  }
+
+  /// The address a new WebView starts with (http becomes https when allowed).
+  String _startUrl() {
+    final u = tab.pendingUrl!;
+    final up = browser.upgradeUrl(u);
+    if (up == null) return u;
+    tab.upgradedFrom = u;
+    return up;
   }
 
   // Reads every <video>/<audio> (and their <source> tags) on the page, with
