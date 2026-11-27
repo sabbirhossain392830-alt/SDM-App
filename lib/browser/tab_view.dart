@@ -349,11 +349,47 @@ class _WebHostState extends State<_WebHost> {
       window.flutter_inappwebview.callHandler('drom_media',{u:a,k:m?'audio':'video',h:0});
     }catch(x){}
   }
+  // streams whose address has no .mp4/.mp3 ending: the server's answer
+  // (Content-Type video/* or audio/*) tells what it is
+  var ctN=0;
+  function byType(ct,u){
+    try{
+      if(!ct||!u||ctN>=12) return;
+      ct=String(ct).toLowerCase();
+      var a=new URL(u,location.href).href;
+      if(/\\.(m4s|ts|cmfv|cmfa|aac|vtt|srt|jpg|png|webp|gif)(\\?|#|\$)/i.test(a)) return;
+      if(/mp2t|segment|mp4-dash/.test(ct)) return;
+      var aud=/^audio\//.test(ct);
+      if(aud||/^video\//.test(ct)||/mpegurl/.test(ct)){
+        ctN++;
+        window.flutter_inappwebview.callHandler('drom_media',{u:a,k:aud?'audio':'video',h:0});
+      }
+    }catch(x){}
+  }
   try{
     var xo=XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open=function(m,u){seen(u);return xo.apply(this,arguments);};
+    XMLHttpRequest.prototype.open=function(m,u){
+      seen(u);
+      var self=this, uu=u;
+      try{
+        this.addEventListener('readystatechange',function(){
+          if(self.readyState===2) byType(self.getResponseHeader('content-type'),uu);
+        });
+      }catch(x){}
+      return xo.apply(this,arguments);
+    };
     var fo=window.fetch;
-    if(fo) window.fetch=function(r){try{seen(typeof r==='string'?r:(r&&r.url));}catch(x){} return fo.apply(this,arguments);};
+    if(fo) window.fetch=function(r){
+      var u=null;
+      try{u=(typeof r==='string')?r:(r&&r.url); seen(u);}catch(x){}
+      var p=fo.apply(this,arguments);
+      try{
+        return p.then(function(resp){
+          try{byType(resp.headers.get('content-type'),resp.url||u);}catch(x){}
+          return resp;
+        });
+      }catch(x){return p;}
+    };
   }catch(x){}
 })();
 ''';
