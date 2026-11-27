@@ -366,6 +366,18 @@ class _WebHostState extends State<_WebHost> {
       }
     }catch(x){}
   }
+  // an HLS playlist is recognised by its first line, whatever its address
+  var plN=0;
+  function byBody(rt,txt,u){
+    try{
+      if(plN>=12||!u) return;
+      if(rt!==''&&rt!=='text') return;
+      if(!txt||String(txt).slice(0,7)!=='#EXTM3U') return;
+      plN++;
+      var a=new URL(u,location.href).href;
+      window.flutter_inappwebview.callHandler('drom_media',{u:a,k:'video',h:0,hls:true});
+    }catch(x){}
+  }
   try{
     var xo=XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open=function(m,u){
@@ -374,6 +386,7 @@ class _WebHostState extends State<_WebHost> {
       try{
         this.addEventListener('readystatechange',function(){
           if(self.readyState===2) byType(self.getResponseHeader('content-type'),uu);
+          if(self.readyState===4&&(self.responseType===''||self.responseType==='text')) byBody('text',self.responseText,uu);
         });
       }catch(x){}
       return xo.apply(this,arguments);
@@ -386,6 +399,14 @@ class _WebHostState extends State<_WebHost> {
       try{
         return p.then(function(resp){
           try{byType(resp.headers.get('content-type'),resp.url||u);}catch(x){}
+          try{
+            var cl=parseInt(resp.headers.get('content-length')||'0');
+            var ct=(resp.headers.get('content-type')||'').toLowerCase();
+            if(cl>0&&cl<300000&&!/^(image|video|audio)\//.test(ct)){
+              var ru=resp.url||u;
+              resp.clone().text().then(function(t){byBody('text',t,ru);}).catch(function(){});
+            }
+          }catch(x){}
           return resp;
         });
       }catch(x){return p;}
@@ -400,7 +421,7 @@ class _WebHostState extends State<_WebHost> {
     if (u is! String || u.isEmpty) return;
     final k = e['k'] == 'audio' ? 'audio' : 'video';
     final h = (e['h'] is num) ? (e['h'] as num).toInt() : 0;
-    browser.addMedia(tab, u, element: k, height: h);
+    browser.addMedia(tab, u, element: k, height: h, hls: e['hls'] == true);
   }
 
   Future<void> _scanMedia(InAppWebViewController c) async {
