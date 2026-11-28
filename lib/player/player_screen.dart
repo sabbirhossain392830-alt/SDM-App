@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
@@ -91,6 +92,17 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _pip = false;
   bool _landscape = true;
   bool _ended = false;
+
+  // two-finger zoom and move
+  double _zoom = 1;
+  Offset _pan = Offset.zero;
+  final Map<int, Offset> _ptrs = {};
+  bool _multi = false; // two fingers are (or were) on the screen
+  double _pinchDist = 1, _pinchZoom = 1;
+  Offset _pinchFocal = Offset.zero, _pinchPan = Offset.zero;
+
+  int _repeat = 0; // 0 off, 1 this video, 2 whole list
+  bool _muted = false;
   double _speed = 1;
   BoxFit _fit = BoxFit.contain;
   List<SubCue> _cues = const [];
@@ -173,6 +185,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       _c = null;
       _err = null;
       _ended = false;
+      _zoom = 1;
+      _pan = Offset.zero;
       _cues = const [];
       _tracks = const [];
       _subOffsetMs = 0;
@@ -395,8 +409,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (done && !_ended) {
       _ended = true;
       _prefs?.remove('pos:${_list[_i]}');
-      if (_i + 1 < _list.length) {
+      if (_repeat == 1) {
+        _ended = false;
+        _c?.seekTo(Duration.zero);
+        _c?.play();
+      } else if (_i + 1 < _list.length) {
         _load(_i + 1);
+      } else if (_repeat == 2 && _list.length > 1) {
+        _load(0);
       } else {
         setState(() => _ui = true);
       }
@@ -478,6 +498,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _cycleFit() {
     setState(() {
+      _zoom = 1;
+      _pan = Offset.zero;
       if (_fit == BoxFit.contain) {
         _fit = BoxFit.cover;
         _showHud(Icons.zoom_out_map_rounded, tr('Zoom'));
@@ -649,12 +671,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     final v = c.value.size;
     return ClipRect(
       child: SizedBox.expand(
-        child: FittedBox(
-          fit: _fit,
-          child: SizedBox(
-              width: v.width <= 0 ? size.width : v.width,
-              height: v.height <= 0 ? size.height : v.height,
-              child: VideoPlayer(c)),
+        child: Transform.translate(
+          offset: _pan,
+          child: Transform.scale(
+            scale: _zoom,
+            child: FittedBox(
+              fit: _fit,
+              child: SizedBox(
+                  width: v.width <= 0 ? size.width : v.width,
+                  height: v.height <= 0 ? size.height : v.height,
+                  child: VideoPlayer(c)),
+            ),
+          ),
         ),
       ),
     );
@@ -690,13 +718,69 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  void _ptrDown(PointerDownEvent e, Size size) {
+    if (_locked || _isAudio) return;
+    _ptrs[e.pointer] = e.position;
+    if (_ptrs.length == 2) {
+      final p = _ptrs.values.toList();
+      _multi = true;
+      _seeking = false; // a seek swipe started by the first finger is dropped
+      _pinchDist = (p[0] - p[1]).distance.clamp(1.0, 100000.0);
+      _pinchZoom = _zoom;
+      _pinchFocal = (p[0] + p[1]) / 2;
+      _pinchPan = _pan;
+    }
+  }
+
+  void _ptrMove(PointerMoveEvent e, Size size) {
+    if (!_ptrs.containsKey(e.pointer)) return;
+    _ptrs[e.pointer] = e.position;
+    if (!_multi || _ptrs.length < 2) return;
+    final p = _ptrs.values.toList();
+    final dist = (p[0] - p[1]).distance;
+    final focal = (p[0] + p[1]) / 2;
+    final z = (_pinchZoom * dist / _pinchDist).clamp(1.0, 5.0);
+    final mx = size.width * (z - 1) / 2, my = size.height * (z - 1) / 2;
+    final pan = _pinchPan + (focal - _pinchFocal);
+    setState(() {
+      _zoom = z;
+      _pan = Offset(pan.dx.clamp(-mx, mx), pan.dy.clamp(-my, my));
+    });
+    _showHud(Icons.zoom_in_rounded, '${z.toStringAsFixed(1)}x');
+  }
+
+  void _ptrUp(PointerEvent e) {
+    _ptrs.remove(e.pointer);
+    if (_ptrs.isEmpty) _multi = false;
+  }
+
   Widget _gestures(Size size) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (e) => _ptrDown(e, size),
+      onPointerMove: (e) => _ptrMove(e, size),
+      onPointerUp: _ptrUp,
+      onPointerCancel: _ptrUp,
+      child: _detector(size),
+    );
+  }
+
+  Widget _detector(Size size) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: _toggleUi,
       onDoubleTapDown: (d) => _lastTapX = d.localPosition.dx,
       onDoubleTap: () {
         if (_locked || _isAudio) return;
+        if (_zoom > 1.01) {
+          // zoomed in: a double tap brings the picture back
+          setState(() {
+            _zoom = 1;
+            _pan = Offset.zero;
+          });
+          _showHud(Icons.zoom_out_rounded, '1x');
+          return;
+        }
         final x = _lastTapX;
         if (x < size.width / 3) {
           _seekBy(-10);
@@ -707,7 +791,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
       },
       onLongPressStart: (_) {
-        if (_locked) return;
+        if (_locked || _multi) return;
         _c?.setPlaybackSpeed(2);
         _showHud(Icons.speed_rounded, '2x');
       },
@@ -717,14 +801,14 @@ class _PlayerScreenState extends State<PlayerScreen>
         _dragFromLeft = d.localPosition.dx < size.width / 2;
       },
       onVerticalDragUpdate: (d) {
-        if (_locked || _isAudio) return;
+        if (_locked || _isAudio || _multi) return;
         _vertDrag(d, size);
       },
       onHorizontalDragStart: (_) {
         if (!_locked) _horzStart();
       },
       onHorizontalDragUpdate: (d) {
-        if (!_locked) _horzUpdate(d, size);
+        if (!_locked && !_multi) _horzUpdate(d, size);
       },
       onHorizontalDragEnd: (_) => _horzEnd(),
     );
@@ -888,6 +972,20 @@ class _PlayerScreenState extends State<PlayerScreen>
                         _showInfo();
                       case 'sleep':
                         _pickSleep();
+                      case 'repeat':
+                        setState(() => _repeat = (_repeat + 1) % 3);
+                        _showHud(Icons.repeat_rounded,
+                            tr(const ['Repeat off', 'Repeat this one', 'Repeat all'][_repeat]));
+                      case 'mute':
+                        setState(() => _muted = !_muted);
+                        _c?.setVolume(_muted ? 0 : 1);
+                        _showHud(
+                            _muted
+                                ? Icons.volume_off_rounded
+                                : Icons.volume_up_rounded,
+                            tr(_muted ? 'Mute' : 'Unmute'));
+                      case 'share':
+                        Share.shareXFiles([XFile(_list[_i])]);
                     }
                   },
                   itemBuilder: (_) => [
@@ -896,6 +994,14 @@ class _PlayerScreenState extends State<PlayerScreen>
                         child: Text(_sleepAt == null
                             ? tr('Sleep timer')
                             : '${tr('Sleep timer')} · ${_sleepAt!.difference(DateTime.now()).inMinutes + 1} ${tr('min')}')),
+                    PopupMenuItem(
+                        value: 'repeat',
+                        child: Text(
+                            '${tr('Repeat')}: ${tr(const ['Repeat off', 'Repeat this one', 'Repeat all'][_repeat])}')),
+                    PopupMenuItem(
+                        value: 'mute',
+                        child: Text(tr(_muted ? 'Unmute' : 'Mute'))),
+                    PopupMenuItem(value: 'share', child: Text(tr('Share'))),
                     PopupMenuItem(value: 'info', child: Text(tr('Video info'))),
                     PopupMenuItem(
                         value: 'ext', child: Text(tr('Open in another player'))),
