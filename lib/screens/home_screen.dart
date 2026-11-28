@@ -15,6 +15,7 @@ import 'app_settings_screen.dart';
 import 'home_hero.dart';
 import '../flow_widgets.dart';
 import '../l10n.dart';
+import '../media_thumb.dart';
 
 enum _Filter { all, active, completed }
 
@@ -770,6 +771,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final nameStyle = const TextStyle(
         fontWeight: FontWeight.w700, fontSize: 16.5, height: 1.25);
 
+    final isVideo = isVideoName(d.fileName);
+    final isAudio = isAudioName(d.fileName);
+    final isImage = isImageName(d.fileName);
+    final sizeLabel = formatBytes(d.total > 0 ? d.total : d.downloaded);
+
     final selected = _sel.contains(d.id);
     return Card(
       margin: EdgeInsets.zero,
@@ -792,18 +798,22 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: kind.color.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(13),
+                  if (done && !selected && (isVideo || isAudio || isImage))
+                    MediaThumb(path: d.savePath, size: 72)
+                  else
+                    Container(
+                      width: done ? 56 : 44,
+                      height: done ? 56 : 44,
+                      decoration: BoxDecoration(
+                        color: kind.color.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: selected
+                          ? Icon(Icons.check_circle_rounded,
+                              color: cs.primary, size: 26)
+                          : Icon(kind.icon,
+                              color: kind.color, size: done ? 28 : 24),
                     ),
-                    child: selected
-                        ? Icon(Icons.check_circle_rounded,
-                            color: cs.primary, size: 26)
-                        : Icon(kind.icon, color: kind.color, size: 24),
-                  ),
                   const SizedBox(width: 12),
                   // the full file name, up to three lines
                   Expanded(
@@ -812,13 +822,30 @@ class _HomeScreenState extends State<HomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(d.fileName,
-                                  maxLines: 3,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: nameStyle),
-                              const SizedBox(height: 2),
-                              Text(status,
-                                  style: TextStyle(
-                                      fontSize: 13, color: statusColor)),
+                              const SizedBox(height: 4),
+                              if (isVideo || isAudio)
+                                // type icon, length and size, like a player list
+                                Row(children: [
+                                  Icon(kind.icon,
+                                      size: 16, color: cs.onSurfaceVariant),
+                                  const SizedBox(width: 6),
+                                  MediaDuration(
+                                      path: d.savePath,
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: cs.onSurfaceVariant)),
+                                  Text('  |  $sizeLabel',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: cs.onSurfaceVariant)),
+                                ])
+                              else
+                                Text(status,
+                                    style: TextStyle(
+                                        fontSize: 13, color: statusColor)),
                             ],
                           )
                         : Text(d.fileName,

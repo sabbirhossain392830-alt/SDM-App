@@ -69,6 +69,19 @@ class _BrowserScreenState extends State<BrowserScreen> {
     browser.screenOpen = v;
     DownloadManager.instance.setBrowserOpen(v);
     if (!v) FocusManager.instance.primaryFocus?.unfocus();
+    // a page in a hidden browser must not keep playing sound
+    for (final t in browser.tabs) {
+      final c = t.controller;
+      if (c == null) continue;
+      try {
+        if (v) {
+          c.resume();
+        } else {
+          c.evaluateJavascript(source: BrowserController.pauseMediaJs);
+          c.pause();
+        }
+      } catch (_) {}
+    }
   }
 
   @override
