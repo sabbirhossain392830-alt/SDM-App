@@ -256,6 +256,8 @@ const Map<String, String> _bn = {
   'Delete file too': 'ফাইলসহ মুছুন',
   'Browser': 'ব্রাউজার',
   'Add link': 'লিংক যোগ করুন',
+  'Details': 'বিস্তারিত',
+  'Copied link found': 'কপি করা লিংক পাওয়া গেছে — ট্যাপ করে ডাউনলোড',
   'Current speed': 'বর্তমান স্পিড',
   'Active': 'চলছে',
   'Done': 'শেষ',

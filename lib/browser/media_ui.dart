@@ -135,15 +135,6 @@ class _MediaBubbleState extends State<MediaBubble> {
   }
 }
 
-String _urlName(String url) {
-  final last = Uri.tryParse(url)?.pathSegments.lastOrNull ?? '';
-  try {
-    return Uri.decodeComponent(last);
-  } catch (_) {
-    return last;
-  }
-}
-
 String _safe(String s) {
   var n = s.replaceAll(RegExp(r'[\\/:*?"<>|\n\r\t]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
   if (n.length > 60) n = n.substring(0, 60).trim();
@@ -227,6 +218,40 @@ class _MediaSheetState extends State<_MediaSheet> {
     return l;
   }
 
+  Widget _tabChip(ColorScheme cs, bool selected, IconData icon, String label,
+      int count, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: selected
+                ? const LinearGradient(
+                    colors: [Color(0xFF4A5BE0), Color(0xFF6FA3FF)])
+                : null,
+            color: selected ? null : cs.surfaceContainerHighest,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 19, color: selected ? Colors.white : cs.onSurfaceVariant),
+              const SizedBox(width: 7),
+              Text('$label  $count',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: selected ? Colors.white : cs.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -238,50 +263,68 @@ class _MediaSheetState extends State<_MediaSheet> {
         final audioTab = _audioTab ?? (videos.isEmpty && audios.isNotEmpty);
         final list = audioTab ? audios : videos;
         final best = list.where((e) => e.downloadable).firstOrNull;
+        final title = widget.tab.title.isNotEmpty
+            ? widget.tab.title
+            : widget.tab.host;
         return SizedBox(
-          height: MediaQuery.of(context).size.height * 0.72,
+          height: MediaQuery.of(context).size.height * 0.84,
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
                 child: Row(children: [
-                  Icon(Icons.download_for_offline_rounded, color: cs.primary),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: T('Audio / video on this page',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w700)),
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF4A5BE0), Color(0xFF6FA3FF)]),
+                    ),
+                    child: const Icon(Icons.download_for_offline_rounded,
+                        color: Colors.white, size: 28),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const T('Audio / video on this page',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w800)),
+                        if (title.isNotEmpty)
+                          Text(title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 12.5, color: cs.onSurfaceVariant)),
+                      ],
+                    ),
                   ),
                 ]),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: SegmentedButton<bool>(
-                    showSelectedIcon: false,
-                    segments: [
-                      ButtonSegment(
-                          value: false,
-                          icon: const Icon(Icons.movie_outlined),
-                          label: Text('${tr('Video')} (${videos.length})')),
-                      ButtonSegment(
-                          value: true,
-                          icon: const Icon(Icons.music_note_outlined),
-                          label: Text('${tr('Audio')} (${audios.length})')),
-                    ],
-                    selected: {audioTab},
-                    onSelectionChanged: (s) =>
-                        setState(() => _audioTab = s.first),
-                  ),
-                ),
+                child: Row(children: [
+                  _tabChip(cs, !audioTab, Icons.movie_rounded, tr('Video'),
+                      videos.length, () => setState(() => _audioTab = false)),
+                  const SizedBox(width: 10),
+                  _tabChip(cs, audioTab, Icons.music_note_rounded, tr('Audio'),
+                      audios.length, () => setState(() => _audioTab = true)),
+                ]),
               ),
-              if (best != null)
+              if (best != null && list.length > 1)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                   child: SizedBox(
                     width: double.infinity,
+                    height: 48,
                     child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14))),
                       onPressed: () => widget.onPick(best),
                       icon: const Icon(Icons.bolt_rounded),
                       label: Text(
@@ -289,40 +332,61 @@ class _MediaSheetState extends State<_MediaSheet> {
                     ),
                   ),
                 ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Expanded(
                 child: list.isEmpty
                     ? Center(
                         child: Padding(
                           padding: const EdgeInsets.all(28),
-                          child: T(
-                            audioTab
-                                ? 'No audio found yet. Play it on the page and it appears here.'
-                                : 'No video found yet. Play it on the page and it appears here.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: cs.onSurfaceVariant),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                  audioTab
+                                      ? Icons.music_off_rounded
+                                      : Icons.videocam_off_rounded,
+                                  size: 54,
+                                  color: cs.outline),
+                              const SizedBox(height: 12),
+                              T(
+                                audioTab
+                                    ? 'No audio found yet. Play it on the page and it appears here.'
+                                    : 'No video found yet. Play it on the page and it appears here.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: cs.onSurfaceVariant),
+                              ),
+                            ],
                           ),
                         ),
                       )
-                    : PullRefresh(child: ListView.separated(physics: kPullPhysics, 
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                    : PullRefresh(
+                        child: ListView.separated(
+                        physics: kPullPhysics,
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                         itemCount: list.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (_, i) => _MediaRow(
                           key: ValueKey(list[i].url),
                           tab: widget.tab,
                           entry: list[i],
-                          isBest: i == 0 && list[i].downloadable && list.length > 1,
+                          isBest:
+                              i == 0 && list[i].downloadable && list.length > 1,
                           onPick: widget.onPick,
                         ),
                       )),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                child: T(
-                  'Protected (DRM) videos and live streams cannot be downloaded.',
-                  style: TextStyle(fontSize: 11.5, color: cs.outline),
-                ),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                child: Row(children: [
+                  Icon(Icons.info_outline_rounded, size: 15, color: cs.outline),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: T(
+                      'Protected (DRM) videos and live streams cannot be downloaded.',
+                      style: TextStyle(fontSize: 11.5, color: cs.outline),
+                    ),
+                  ),
+                ]),
               ),
             ],
           ),
@@ -369,25 +433,52 @@ class _MediaRowState extends State<_MediaRow> {
     if (mounted) setState(() {});
   }
 
-  String _detail() {
-    final parts = <String>[];
-    parts.add(e.hls ? 'HLS' : e.ext.toUpperCase());
-    if (e.size > 0) {
-      parts.add(formatBytes(e.size));
-    } else if (e.hls && e.bandwidth > 0 && e.seconds > 0) {
-      parts.add('~${formatBytes(e.bandwidth / 8 * e.seconds)}');
-    } else if (e.hls && e.bandwidth > 0) {
-      parts.add('${(e.bandwidth / 1000000).toStringAsFixed(1)} Mbps');
-    } else if (!e.hls && !e.sizeAsked) {
-      parts.add(tr('checking…'));
+  String _sizeText() {
+    if (e.size > 0) return formatBytes(e.size);
+    if (e.hls && e.bandwidth > 0 && e.seconds > 0) {
+      return '~${formatBytes(e.bandwidth / 8 * e.seconds)}';
     }
-    if (e.seconds > 0) {
-      final s = e.seconds.round();
-      parts.add(s >= 3600
-          ? '${s ~/ 3600}h ${(s % 3600) ~/ 60}m'
-          : '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}');
+    if (e.hls && e.bandwidth > 0) {
+      return '${(e.bandwidth / 1000000).toStringAsFixed(1)} Mbps';
     }
-    return parts.join(' · ');
+    if (!e.hls && !e.sizeAsked) return tr('checking…');
+    return '';
+  }
+
+  String _durText() {
+    if (e.seconds <= 0) return '';
+    final s = e.seconds.round();
+    return s >= 3600
+        ? '${s ~/ 3600}h ${(s % 3600) ~/ 60}m'
+        : '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  Color _badge() {
+    if (e.audio) return const Color(0xFF8B5CF6);
+    final h = e.height;
+    if (h >= 2160) return const Color(0xFFE11D48);
+    if (h >= 1080) return const Color(0xFF4A5BE0);
+    if (h >= 720) return const Color(0xFF0EA5E9);
+    return const Color(0xFF64748B);
+  }
+
+  Widget _chip(ColorScheme cs, IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: cs.onSurfaceVariant),
+        const SizedBox(width: 5),
+        Text(text,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurfaceVariant)),
+      ]),
+    );
   }
 
   @override
@@ -399,62 +490,132 @@ class _MediaRowState extends State<_MediaRow> {
     if (note == null && e.separateAudio) {
       note = 'Sound is a separate stream: also download it from the Audio tab';
     }
-    return ListTile(
-      enabled: e.downloadable,
-      leading: Container(
-        width: 44,
-        height: 44,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: cs.primaryContainer,
-          borderRadius: BorderRadius.circular(12),
+    final c = _badge();
+    final size = _sizeText();
+    final dur = _durText();
+    final ok = e.downloadable;
+    return Opacity(
+      opacity: ok ? 1 : 0.6,
+      child: Material(
+        color: cs.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+              color: widget.isBest
+                  ? c.withValues(alpha: 0.7)
+                  : cs.outlineVariant.withValues(alpha: 0.5),
+              width: widget.isBest ? 1.5 : 1),
         ),
-        child: Icon(
-            e.audio ? Icons.music_note_rounded : Icons.play_arrow_rounded,
-            color: cs.onPrimaryContainer),
-      ),
-      title: Row(children: [
-        Flexible(
-          child: Text(_qualityName(e),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-        ),
-        if (widget.isBest) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: const Color(0xFF16A34A),
-              borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: ok ? () => widget.onPick(e) : null,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [c, c.withValues(alpha: 0.7)]),
+                    ),
+                    child: Icon(
+                        e.audio
+                            ? Icons.music_note_rounded
+                            : Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 30),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Flexible(
+                            child: Text(_qualityName(e),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w800)),
+                          ),
+                          if (widget.isBest) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF16A34A),
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: Text(tr('Best'),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ],
+                        ]),
+                        const SizedBox(height: 7),
+                        Wrap(spacing: 6, runSpacing: 6, children: [
+                          _chip(cs, Icons.insert_drive_file_outlined,
+                              e.hls ? 'HLS' : e.ext.toUpperCase()),
+                          if (size.isNotEmpty)
+                            _chip(cs, Icons.data_usage_rounded, size),
+                          if (dur.isNotEmpty)
+                            _chip(cs, Icons.schedule_rounded, dur),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ok
+                      ? Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: c,
+                          ),
+                          child: const Icon(Icons.download_rounded,
+                              color: Colors.white),
+                        )
+                      : Icon(Icons.lock_outline_rounded, color: cs.error),
+                ]),
+                if (note != null) ...[
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Icon(
+                        (e.encrypted || e.live)
+                            ? Icons.block_rounded
+                            : Icons.info_outline_rounded,
+                        size: 15,
+                        color: (e.encrypted || e.live)
+                            ? cs.error
+                            : cs.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(tr(note),
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: (e.encrypted || e.live)
+                                  ? cs.error
+                                  : cs.onSurfaceVariant)),
+                    ),
+                  ]),
+                ],
+              ],
             ),
-            child: Text(tr('Best'),
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700)),
           ),
-        ],
-      ]),
-      subtitle: Text(
-        [
-          widget.tab.title.isNotEmpty ? widget.tab.title : _urlName(e.url),
-          _detail(),
-          if (note != null) tr(note),
-        ].join('\n'),
-        style: TextStyle(
-            color: (e.encrypted || e.live) ? cs.error : cs.onSurfaceVariant,
-            fontSize: 12.5),
+        ),
       ),
-      isThreeLine: true,
-      trailing: e.downloadable
-          ? IconButton.filledTonal(
-              tooltip: tr('Download'),
-              icon: const Icon(Icons.download_rounded),
-              onPressed: () => widget.onPick(e),
-            )
-          : const Icon(Icons.lock_outline_rounded),
-      onTap: e.downloadable ? () => widget.onPick(e) : null,
     );
   }
 }
