@@ -31,6 +31,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/logo.png
+    - assets/home_bg.jpg
 
 # Launcher icon (generated in CI with: dart run flutter_launcher_icons)
 flutter_launcher_icons:

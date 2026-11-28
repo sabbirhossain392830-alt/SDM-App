@@ -1,5 +1,7 @@
 import '../pull_refresh.dart';
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../download_manager.dart';
@@ -145,12 +147,79 @@ String _qualityName(MediaEntry e) {
   return '${h}p$tag';
 }
 
-String _fileNameFor(BrowserTab tab, MediaEntry e) {
-  final base = _safe(tab.title.isNotEmpty ? tab.title : tab.host);
+const _genericNames = {
+  'master', 'index', 'playlist', 'video', 'audio', 'stream', 'manifest',
+  'chunk', 'main', 'play', 'hls', 'media', 'file', 'download', 'output',
+  'movie', 'v', 'a', 'seg', 'segment', 'init', 'mp4', 'prog', 'default',
+};
+
+/// The file name inside the link, when it really is a name (not an id).
+String? _nameFromUrl(MediaEntry e) {
+  if (e.hls) return null;
+  final last = Uri.tryParse(e.url)?.pathSegments.lastOrNull ?? '';
+  if (last.isEmpty) return null;
+  String n;
+  try {
+    n = Uri.decodeComponent(last);
+  } catch (_) {
+    n = last;
+  }
+  final dot = n.lastIndexOf('.');
+  if (dot > 0) n = n.substring(0, dot);
+  n = n.replaceAll(RegExp(r'[_+]+'), ' ').trim();
+  final letters = RegExp(r'[A-Za-zঀ-৿]').allMatches(n).length;
+  if (n.length < 6 || letters < 4) return null;
+  if (_genericNames.contains(n.toLowerCase())) return null;
+  if (RegExp(r'^[0-9a-fA-F\- ]{16,}$').hasMatch(n)) return null;
+  if (RegExp(r'^[A-Za-z0-9\-]{20,}$').hasMatch(n) &&
+      !RegExp(r'[ .]').hasMatch(n) &&
+      RegExp(r'\d').hasMatch(n) &&
+      RegExp(r'[A-Z]').hasMatch(n) &&
+      RegExp(r'[a-z]').hasMatch(n)) {
+    return null; // looks like a random token
+  }
+  return _safe(n);
+}
+
+/// The title the page itself shows for the video (read from the live page).
+Future<String> _pageTitle(BrowserTab tab) async {
+  var best = '';
+  try {
+    final r = await tab.controller?.evaluateJavascript(source: r"""
+(function(){
+  function q(s){var e=document.querySelector(s);
+    return e?String(e.content||e.textContent||'').replace(/\s+/g,' ').trim():'';}
+  return JSON.stringify([q('meta[property="og:title"]'),q('h1'),document.title]);
+})()
+""");
+    final l = (jsonDecode(r.toString()) as List).cast<String>();
+    for (final t in l) {
+      if (t.length >= 3) {
+        best = t;
+        break;
+      }
+    }
+  } catch (_) {}
+  if (best.isEmpty) best = tab.title;
+  if (best.isEmpty) best = tab.host;
+  // "Movie name | Site name" -> keep the first part
+  final parts = best.split(RegExp(r'\s+[|–—]\s+|\s+-\s+'));
+  if (parts.length > 1 && parts.first.trim().length >= 4) best = parts.first;
+  return _safe(best);
+}
+
+Future<String> _fileNameFor(BrowserTab tab, MediaEntry e) async {
+  final fromUrl = _nameFromUrl(e);
+  if (fromUrl != null) return '$fromUrl.${e.ext}';
+  final base = await _pageTitle(tab);
   final q = e.audio
       ? (e.label.isNotEmpty ? _safe(e.label) : 'audio')
       : (e.height > 0 ? '${e.height}p' : '');
-  final name = [if (base.isNotEmpty) base else 'media', if (q.isNotEmpty) q].join(' ');
+  final has = q.isNotEmpty && base.toLowerCase().contains(q.toLowerCase());
+  final name = [
+    if (base.isNotEmpty) base else 'media',
+    if (q.isNotEmpty && !has) q,
+  ].join(' ');
   return '$name.${e.ext}';
 }
 
@@ -164,11 +233,12 @@ Future<void> showMediaSheet(
     context,
     builder: (ctx) => _MediaSheet(
       tab: tab,
-      onPick: (e) {
-        Navigator.pop(ctx);
+      onPick: (e) async {
+        final name = await _fileNameFor(tab, e);
+        if (ctx.mounted) Navigator.pop(ctx);
         onDownload(DownloadRequest(
           url: e.url,
-          fileName: _fileNameFor(tab, e),
+          fileName: name,
           referer: e.referer == '' ? null : (e.referer ?? tab.url),
           userAgent: tab.userAgent,
         ));
