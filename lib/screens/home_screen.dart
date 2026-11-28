@@ -131,7 +131,55 @@ class _HomeScreenState extends State<HomeScreen> {
             T('Paste a direct link to a file',
                 style: TextStyle(
                     color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            FutureBuilder<ClipboardData?>(
+              future: Clipboard.getData('text/plain'),
+              builder: (c, snap) {
+                final t = snap.data?.text?.trim() ?? '';
+                if (!(t.startsWith('http://') || t.startsWith('https://'))) {
+                  return const SizedBox.shrink();
+                }
+                final cs = Theme.of(c).colorScheme;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Material(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () => Navigator.pop(ctx, t),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(children: [
+                          Icon(Icons.content_paste_go_rounded,
+                              color: cs.onPrimaryContainer),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                T('Copied link found',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: cs.onPrimaryContainer)),
+                                Text(t,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: cs.onPrimaryContainer)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.download_rounded,
+                              color: cs.onPrimaryContainer),
+                        ]),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
             TextField(
               controller: ctrl,
               autofocus: true,
@@ -494,7 +542,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : widget.library
               ? SafeArea(bottom: false, child: _listBody(items))
               : _listBody(items),
-      floatingActionButton: (_selecting || widget.tab || widget.library)
+      floatingActionButton: (_selecting || widget.library)
           ? null
           : _AddLinkButton(onTap: _showAddSheet),
     ));
@@ -999,14 +1047,43 @@ class _AddLinkButtonState extends State<_AddLinkButton>
 
   @override
   Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scale,
-      child: FloatingActionButton.extended(
-        onPressed: _tap,
-        icon: RotationTransition(
-            turns: _turn, child: const Icon(Icons.add_rounded)),
-        label: const T('Add link',
-            style: TextStyle(fontWeight: FontWeight.w600)),
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 650),
+      curve: Curves.elasticOut,
+      builder: (_, v, child) => Opacity(
+        opacity: v.clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset(0, (1 - v) * 40),
+          child: Transform.scale(scale: 0.4 + 0.6 * v, child: child),
+        ),
+      ),
+      child: ScaleTransition(
+        scale: _scale,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                  color: const Color(0xFF4A5BE0).withValues(alpha: 0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6)),
+            ],
+          ),
+          child: FloatingActionButton.extended(
+            elevation: 0,
+            focusElevation: 0,
+            hoverElevation: 0,
+            highlightElevation: 0,
+            backgroundColor: const Color(0xFF4A5BE0),
+            foregroundColor: Colors.white,
+            onPressed: _tap,
+            icon: RotationTransition(
+                turns: _turn, child: const Icon(Icons.add_rounded)),
+            label: const T('Add link',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ),
       ),
     );
   }

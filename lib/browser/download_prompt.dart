@@ -170,6 +170,7 @@ class _PromptSheetState extends State<_PromptSheet> {
       !_dirManual && DownloadManager.instance.sortByType && _dir != null;
   ProbeResult? _info; // what the file check found (reused when starting)
   bool _busy = false;
+  bool _showDetails = false;
   bool _copied = false;
   String? _error;
 
@@ -374,35 +375,69 @@ class _PromptSheetState extends State<_PromptSheet> {
                         ),
                       ]),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 6),
                     _Appear(
                       key: const ValueKey('file'),
                       index: 1,
                       child: _fileCard(cs, kind, name, mime, size, loading),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 4),
                     _Appear(
                       key: const ValueKey('details'),
                       index: 2,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: cs.outlineVariant),
-                          borderRadius: BorderRadius.circular(16),
+                      child: Column(children: [
+                        InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () =>
+                              setState(() => _showDetails = !_showDetails),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Row(children: [
+                              Icon(Icons.public_rounded,
+                                  size: 16, color: cs.outline),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(host,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: cs.onSurfaceVariant)),
+                              ),
+                              Text(tr('Details'),
+                                  style: TextStyle(
+                                      fontSize: 12.5, color: cs.primary)),
+                              Icon(
+                                  _showDetails
+                                      ? Icons.expand_less_rounded
+                                      : Icons.expand_more_rounded,
+                                  size: 20,
+                                  color: cs.primary),
+                            ]),
+                          ),
                         ),
-                        child: Column(children: [
-                          for (var i = 0; i < rows.length; i++) ...[
-                            if (i > 0)
-                              Divider(
-                                  height: 1,
-                                  indent: 14,
-                                  endIndent: 14,
-                                  color: cs.outlineVariant),
-                            rows[i],
-                          ],
-                        ]),
-                      ),
+                        if (_showDetails)
+                          Container(
+                            margin: const EdgeInsets.only(top: 4),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: cs.outlineVariant),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(children: [
+                              for (var i = 0; i < rows.length; i++) ...[
+                                if (i > 0)
+                                  Divider(
+                                      height: 1,
+                                      indent: 14,
+                                      endIndent: 14,
+                                      color: cs.outlineVariant),
+                                rows[i],
+                              ],
+                            ]),
+                          ),
+                      ]),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     _Appear(
                       key: const ValueKey('save'),
                       index: 3,
@@ -421,7 +456,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                           'This link returns a web page, not a downloadable file.'),
                     if (probeError != null) _note(cs, probeError),
                     if (_error != null) _note(cs, _error!),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 12),
                     _Appear(
                       key: const ValueKey('buttons'),
                       index: 4,
