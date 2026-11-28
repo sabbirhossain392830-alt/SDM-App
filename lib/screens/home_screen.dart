@@ -665,8 +665,122 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ]),
         ),
+        const SizedBox(height: 22),
+        _shortcuts(),
       ]),
     );
+  }
+
+  /// Sites under the search box. Tap opens the site in the browser, long press
+  /// removes it, and the + button adds a new one.
+  Widget _shortcuts() {
+    final cs = Theme.of(context).colorScheme;
+    final dark = cs.brightness == Brightness.dark;
+    final accent = dark ? _gold : _blueDeep;
+    final b = BrowserController.instance;
+    Widget tile(Widget child, String label,
+            {VoidCallback? onTap, VoidCallback? onLong}) =>
+        InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          onLongPress: onLong,
+          child: SizedBox(
+            width: 74,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: cs.onSurface.withValues(alpha: 0.07),
+                  shape: BoxShape.circle,
+                ),
+                child: child,
+              ),
+              const SizedBox(height: 6),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant)),
+            ]),
+          ),
+        );
+    return ListenableBuilder(
+      listenable: b,
+      builder: (context, _) => Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 4,
+        runSpacing: 10,
+        children: [
+          for (final sc in b.shortcuts.take(11))
+            tile(
+              Text(sc.name.isEmpty ? '?' : sc.name[0].toUpperCase(),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 19, color: accent)),
+              sc.name,
+              onTap: () => _openInBrowser(sc.url),
+              onLong: () => _removeShortcut(sc),
+            ),
+          tile(Icon(Icons.add_rounded, color: accent), tr('Add shortcut'),
+              onTap: _addShortcut),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addShortcut() async {
+    final name = TextEditingController();
+    final url = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const T('Add shortcut'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: name,
+            decoration: InputDecoration(hintText: tr('Name')),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: url,
+            keyboardType: TextInputType.url,
+            decoration: InputDecoration(hintText: tr('Website address')),
+            onSubmitted: (_) => Navigator.pop(ctx, true),
+          ),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const T('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const T('Add')),
+        ],
+      ),
+    );
+    final u = url.text.trim();
+    if (ok == true && u.isNotEmpty) {
+      await BrowserController.instance.addShortcut(name.text, u);
+    }
+  }
+
+  Future<void> _removeShortcut(Shortcut sc) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(sc.name),
+        content: const T('Remove this shortcut?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const T('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const T('Remove')),
+        ],
+      ),
+    );
+    if (ok == true) await BrowserController.instance.removeShortcut(sc);
   }
 
   Widget _tabBody() {
