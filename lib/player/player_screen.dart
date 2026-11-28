@@ -95,6 +95,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   BoxFit _fit = BoxFit.contain;
   List<SubCue> _cues = const [];
   bool _subsOn = true;
+  double _subSize = 17;
+  List<dynamic> _tracks = const []; // audio tracks of the file
+  Timer? _sleepT;
+  DateTime? _sleepAt;
   _Panel? _panel;
   String? _subFile;
   int _subOffsetMs = 0;
@@ -170,6 +174,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _err = null;
       _ended = false;
       _cues = const [];
+      _tracks = const [];
       _subOffsetMs = 0;
     });
     old?.dispose();
@@ -198,6 +203,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     // sound level of this player follows the phone's volume
     await c.setVolume(1);
     await c.play();
+    _loadTracks(c);
     _chan.invokeMethod('keepOn', true).catchError((_) {});
     final wide = c.value.aspectRatio >= 1 && !_isAudio;
     _landscape = wide;
@@ -212,6 +218,151 @@ class _PlayerScreenState extends State<PlayerScreen>
         });
       }
     });
+  }
+
+  /// Asks the player which sound tracks (languages) the file holds.
+  Future<void> _loadTracks(VideoPlayerController c) async {
+    try {
+      final t = List<dynamic>.from(await c.getAudioTracks());
+      if (mounted) setState(() => _tracks = t);
+    } catch (_) {
+      if (mounted) setState(() => _tracks = const []);
+    }
+  }
+
+  Future<void> _pickTrack(dynamic t) async {
+    final c = _c;
+    if (c == null) return;
+    try {
+      await c.selectAudioTrack(t.id as String);
+      await _loadTracks(c);
+      _showHud(Icons.music_note_rounded, _trackName(t, 0));
+    } catch (_) {
+      _showHud(Icons.error_outline_rounded, tr('This sound track cannot be selected'));
+    }
+  }
+
+  static const _langs = {
+    'bn': 'Bangla', 'ben': 'Bangla', 'hi': 'Hindi', 'hin': 'Hindi',
+    'en': 'English', 'eng': 'English', 'ur': 'Urdu', 'urd': 'Urdu',
+    'ta': 'Tamil', 'tam': 'Tamil', 'te': 'Telugu', 'tel': 'Telugu',
+    'ml': 'Malayalam', 'mal': 'Malayalam', 'kn': 'Kannada', 'kan': 'Kannada',
+    'pa': 'Punjabi', 'pan': 'Punjabi', 'mr': 'Marathi', 'mar': 'Marathi',
+    'ar': 'Arabic', 'ara': 'Arabic', 'ja': 'Japanese', 'jpn': 'Japanese',
+    'ko': 'Korean', 'kor': 'Korean', 'zh': 'Chinese', 'zho': 'Chinese',
+    'chi': 'Chinese', 'es': 'Spanish', 'spa': 'Spanish', 'fr': 'French',
+    'fra': 'French', 'fre': 'French', 'de': 'German', 'deu': 'German',
+    'ger': 'German', 'ru': 'Russian', 'rus': 'Russian', 'tr': 'Turkish',
+    'tur': 'Turkish', 'th': 'Thai', 'tha': 'Thai', 'id': 'Indonesian',
+    'ind': 'Indonesian', 'pt': 'Portuguese', 'por': 'Portuguese',
+    'it': 'Italian', 'ita': 'Italian', 'ne': 'Nepali', 'nep': 'Nepali',
+  };
+
+  String _trackName(dynamic t, int index) {
+    String? s(dynamic v) {
+      final x = v?.toString().trim();
+      return (x == null || x.isEmpty || x == 'und' || x == 'null') ? null : x;
+    }
+
+    final label = s(t.label);
+    final lang = s(t.language);
+    final langName = lang == null
+        ? null
+        : (_langs[lang.toLowerCase().split('-').first] ?? lang);
+    final parts = <String>[
+      if (label != null) label else if (langName != null) langName else '${tr('Audio')} ${index + 1}',
+      if (label != null && langName != null && !label.toLowerCase().contains(langName.toLowerCase())) langName,
+    ];
+    final extra = <String>[];
+    final codec = s(t.codec);
+    if (codec != null) extra.add(codec.replaceAll(RegExp(r'^audio/'), '').toUpperCase());
+    final ch = t.channelCount;
+    if (ch is int && ch > 0) extra.add(ch == 1 ? 'Mono' : (ch == 2 ? 'Stereo' : '$ch ch'));
+    return extra.isEmpty ? parts.join(' · ') : '${parts.join(' · ')}  (${extra.join(', ')})';
+  }
+
+  void _setSleep(int minutes) {
+    _sleepT?.cancel();
+    if (minutes <= 0) {
+      _sleepAt = null;
+      _showHud(Icons.timer_off_outlined, tr('Sleep timer off'));
+    } else {
+      _sleepAt = DateTime.now().add(Duration(minutes: minutes));
+      _sleepT = Timer(Duration(minutes: minutes), () {
+        _c?.pause();
+        _sleepAt = null;
+        if (mounted) setState(() {});
+      });
+      _showHud(Icons.bedtime_outlined, '$minutes ${tr('min')}');
+    }
+    setState(() {});
+  }
+
+  Future<void> _pickSleep() async {
+    final m = await showDialog<int>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(tr('Sleep timer')),
+        children: [
+          for (final x in const [0, 15, 30, 45, 60, 90])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, x),
+              child: Text(x == 0 ? tr('Off') : '$x ${tr('min')}'),
+            ),
+        ],
+      ),
+    );
+    if (m != null) _setSleep(m);
+  }
+
+  void _showInfo() {
+    final c = _c;
+    final path = _list[_i];
+    String size = '';
+    try {
+      final b = File(path).lengthSync();
+      size = b > 1 << 30
+          ? '${(b / (1 << 30)).toStringAsFixed(2)} GB'
+          : '${(b / (1 << 20)).toStringAsFixed(1)} MB';
+    } catch (_) {}
+    final v = c?.value;
+    final rows = <(String, String)>[
+      (tr('Name'), _name(path)),
+      (tr('Folder'), path.substring(0, path.lastIndexOf('/'))),
+      if (size.isNotEmpty) (tr('Size'), size),
+      if (v != null && v.size.width > 0)
+        (tr('Resolution'), '${v.size.width.toInt()} × ${v.size.height.toInt()}'),
+      if (v != null) (tr('Length'), _fmt(v.duration)),
+      if (_tracks.isNotEmpty) (tr('Audio'), '${_tracks.length}'),
+    ];
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('Video info')),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final r in rows)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text.rich(TextSpan(children: [
+                    TextSpan(
+                        text: '${r.$1}: ',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    TextSpan(text: r.$2),
+                  ])),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: Text(tr('Close'))),
+        ],
+      ),
+    );
   }
 
   void _applyOrientation() {
@@ -385,6 +536,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _hideT?.cancel();
     _saveT?.cancel();
     _hudT?.cancel();
+    _sleepT?.cancel();
     _chan.setMethodCallHandler(null);
     _chan.invokeMethod('keepOn', false).catchError((_) {});
     _chan.invokeMethod('setBrightness', -1.0).catchError((_) {});
@@ -530,7 +682,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               child: Text(t,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      color: Colors.white, fontSize: 17, height: 1.3)),
+                      color: Colors.white, fontSize: _subSize, height: 1.3)),
             ),
           );
         },
@@ -729,9 +881,22 @@ class _PlayerScreenState extends State<PlayerScreen>
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
                   onSelected: (v) {
-                    if (v == 'ext') _external();
+                    switch (v) {
+                      case 'ext':
+                        _external();
+                      case 'info':
+                        _showInfo();
+                      case 'sleep':
+                        _pickSleep();
+                    }
                   },
                   itemBuilder: (_) => [
+                    PopupMenuItem(
+                        value: 'sleep',
+                        child: Text(_sleepAt == null
+                            ? tr('Sleep timer')
+                            : '${tr('Sleep timer')} · ${_sleepAt!.difference(DateTime.now()).inMinutes + 1} ${tr('min')}')),
+                    PopupMenuItem(value: 'info', child: Text(tr('Video info'))),
                     PopupMenuItem(
                         value: 'ext', child: Text(tr('Open in another player'))),
                   ],
@@ -888,7 +1053,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     final children = <Widget>[
       if (audio) ...[
         head(tr('Audio track')),
-        radio(tr('Default audio track'), true, null),
+        if (_tracks.isEmpty)
+          radio(tr('Default audio track'), true, null)
+        else
+          for (var i = 0; i < _tracks.length; i++)
+            radio(_trackName(_tracks[i], i), _tracks[i].isSelected == true,
+                () => _pickTrack(_tracks[i])),
         const Divider(color: Colors.white12),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -947,6 +1117,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             '${(_subOffsetMs / 1000).toStringAsFixed(2)}s',
             () => setState(() => _subOffsetMs -= 250),
             () => setState(() => _subOffsetMs += 250)),
+        stepper(tr('Size'), '${_subSize.round()}',
+            () => setState(() => _subSize = (_subSize - 2).clamp(11, 40)),
+            () => setState(() => _subSize = (_subSize + 2).clamp(11, 40))),
       ],
     ];
     return Stack(children: [
