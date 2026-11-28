@@ -24,7 +24,14 @@ class HomeScreen extends StatefulWidget {
 
   /// true when it is the Download tab of the main screen.
   final bool tab;
-  const HomeScreen({super.key, this.embedded = false, this.tab = false});
+
+  /// true when it is the Play tab: speed card, filters and the downloads list.
+  final bool library;
+  const HomeScreen(
+      {super.key,
+      this.embedded = false,
+      this.tab = false,
+      this.library = false});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -472,7 +479,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(width: 4),
               ],
             )
-          : widget.tab
+          : (widget.tab || widget.library)
               ? null
               : AppBar(
         title: Text(widget.embedded ? tr('Downloads') : 'SDM'),
@@ -490,8 +497,18 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: widget.tab
-          ? SafeArea(bottom: false, child: _tabBody(items))
-          : Column(
+          ? SafeArea(bottom: false, child: _tabBody())
+          : widget.library
+              ? SafeArea(bottom: false, child: _listBody(items))
+              : _listBody(items),
+      floatingActionButton: (_selecting || widget.tab || widget.library)
+          ? null
+          : _AddLinkButton(onTap: _showAddSheet),
+    ));
+  }
+
+  Widget _listBody(List<DownloadItem> items) {
+    return Column(
         children: [
           const UpdateBanner(),
           _summary(),
@@ -531,16 +548,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
-      ),
-      floatingActionButton: (_selecting || widget.tab)
-          ? null
-          : _AddLinkButton(onTap: _showAddSheet),
-    ));
+      );
   }
 
   // ------------------------------------------------- Download tab (home)
 
-  static const _gold = Color(0xFFFFC800);
+  // the colours of the SDM logo (blue vault)
+  static const _gold = Color(0xFF6FA3FF);
+  static const _blueDeep = Color(0xFF4A5BE0);
 
   static bool _looksLikeFileLink(String t) {
     final u = Uri.tryParse(t);
@@ -587,48 +602,24 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _hero() {
     final cs = Theme.of(context).colorScheme;
     final dark = cs.brightness == Brightness.dark;
-    final accent = dark ? _gold : const Color(0xFFB45309);
-    final sites = BrowserController.instance.shortcuts.take(8).toList();
-    Widget site(IconData? icon, String label, String? letter, VoidCallback f) =>
-        InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: f,
-          child: SizedBox(
-            width: 70,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                width: 46,
-                height: 46,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: cs.onSurface.withValues(alpha: 0.07),
-                  shape: BoxShape.circle,
-                ),
-                child: icon != null
-                    ? Icon(icon, color: accent)
-                    : Text(letter ?? '',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            color: accent)),
-              ),
-              const SizedBox(height: 6),
-              Text(label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant)),
-            ]),
-          ),
-        );
+    final accent = dark ? _gold : _blueDeep;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 40, 18, 10),
       child: Column(children: [
-        Text('SDM',
-            style: TextStyle(
-                fontSize: 58,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1,
-                color: accent)),
+        ShaderMask(
+          shaderCallback: (r) => const LinearGradient(
+            colors: [Color(0xFF4040D0), Color(0xFF6090F0)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ).createShader(r),
+          blendMode: BlendMode.srcIn,
+          child: const Text('SDM',
+              style: TextStyle(
+                  fontSize: 58,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                  color: Colors.white)),
+        ),
         const SizedBox(height: 30),
         Container(
           height: 58,
@@ -665,8 +656,8 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.only(right: 6),
               child: IconButton.filled(
                 style: IconButton.styleFrom(
-                    backgroundColor: dark ? _gold : accent,
-                    foregroundColor: dark ? Colors.black : Colors.white,
+                    backgroundColor: const Color(0xFF4F6FF0),
+                    foregroundColor: Colors.white,
                     fixedSize: const Size(46, 46)),
                 icon: const Icon(Icons.search_rounded),
                 onPressed: () => _go(_search.text),
@@ -674,52 +665,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ]),
         ),
-        const SizedBox(height: 22),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            site(Icons.public_rounded, tr('Browser'), null,
-                () => _openInBrowser(null)),
-            for (final s in sites)
-              site(null, s.name, s.name.isEmpty ? '' : s.name[0].toUpperCase(),
-                  () => _openInBrowser(s.url)),
-          ]),
-        ),
       ]),
     );
   }
 
-  Widget _tabBody(List<DownloadItem> items) {
-    const head = 4;
+  Widget _tabBody() {
     return RefreshIndicator(
       onRefresh: _refresh,
-      child: ListView.builder(
+      child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 24),
-        itemCount: head + (items.isEmpty ? 1 : items.length),
-        itemBuilder: (_, i) {
-          if (i == 0) return const UpdateBanner();
-          if (i == 1) return _hero();
-          if (i == 2) return _summary();
-          if (i == 3) return _filters();
-          if (items.isEmpty) return SizedBox(height: 260, child: _empty());
-          final d = items[i - head];
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TweenAnimationBuilder<double>(
-              key: ValueKey('t_${d.id}'),
-              tween: Tween(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-              builder: (_, v, child) => Opacity(
-                opacity: v,
-                child: Transform.translate(
-                    offset: Offset(0, (1 - v) * 14), child: child),
-              ),
-              child: _tile(d),
-            ),
-          );
-        },
+        children: [const UpdateBanner(), _hero()],
       ),
     );
   }
