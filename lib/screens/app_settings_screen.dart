@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../browser/browser_controller.dart';
 import '../browser/sheets.dart';
+import '../app_share.dart';
 import '../download_manager.dart';
 import '../l10n.dart';
 import '../folder_picker.dart';
@@ -102,6 +103,11 @@ class AppSettingsScreen extends StatelessWidget {
               ),
             ),
             const Divider(),
+            ListTile(
+              leading: const Icon(Icons.share_rounded),
+              title: const T('Share app'),
+              onTap: shareApp,
+            ),
             ListTile(
               leading: const Icon(Icons.info_outline_rounded),
               title: const T('About'),

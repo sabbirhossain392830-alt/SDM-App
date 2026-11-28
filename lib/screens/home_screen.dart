@@ -21,7 +21,10 @@ enum _Filter { all, active, completed }
 class HomeScreen extends StatefulWidget {
   /// true when opened from the browser's "Downloads" menu entry.
   final bool embedded;
-  const HomeScreen({super.key, this.embedded = false});
+
+  /// true when it is the Download tab of the main screen.
+  final bool tab;
+  const HomeScreen({super.key, this.embedded = false, this.tab = false});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -31,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final dm = DownloadManager.instance;
   _Filter _filter = _Filter.all;
   final Set<String> _sel = {};
+  final TextEditingController _search = TextEditingController();
 
   bool get _selecting => _sel.isNotEmpty;
 
@@ -64,6 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _search.dispose();
     dm.removeListener(_rebuild);
     dm.lowBattery.removeListener(_onLowBattery);
     UpdateChecker.instance.removeListener(_rebuild);
@@ -467,7 +472,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(width: 4),
               ],
             )
-          : AppBar(
+          : widget.tab
+              ? null
+              : AppBar(
         title: Text(widget.embedded ? tr('Downloads') : 'SDM'),
         actions: [
           // Browser icon and the three-dot menu are always there.
@@ -482,7 +489,9 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
+      body: widget.tab
+          ? SafeArea(bottom: false, child: _tabBody(items))
+          : Column(
         children: [
           const UpdateBanner(),
           _summary(),
@@ -523,9 +532,196 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton:
-          _selecting ? null : _AddLinkButton(onTap: _showAddSheet),
+      floatingActionButton: (_selecting || widget.tab)
+          ? null
+          : _AddLinkButton(onTap: _showAddSheet),
     ));
+  }
+
+  // ------------------------------------------------- Download tab (home)
+
+  static const _gold = Color(0xFFFFC800);
+
+  static bool _looksLikeFileLink(String t) {
+    final u = Uri.tryParse(t);
+    if (u == null || !(u.scheme == 'http' || u.scheme == 'https')) return false;
+    final last = u.pathSegments.isEmpty ? '' : u.pathSegments.last;
+    final m = RegExp(r'\.([A-Za-z0-9]{2,5})$').firstMatch(last);
+    if (m == null) return false;
+    const pages = {'html', 'htm', 'php', 'asp', 'aspx', 'jsp', 'xhtml'};
+    return !pages.contains(m.group(1)!.toLowerCase());
+  }
+
+  Future<void> _openInBrowser(String? input) async {
+    final b = BrowserController.instance;
+    if (input != null && input.trim().isNotEmpty) {
+      b.newTab(url: BrowserController.resolveInput(input));
+    }
+    await _openBrowser();
+  }
+
+  /// Search box: a file link starts the download popup, a web address or
+  /// words open the browser.
+  Future<void> _go(String text) async {
+    final t = text.trim();
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (t.isEmpty) {
+      await _openInBrowser(null);
+      return;
+    }
+    _search.clear();
+    if (_looksLikeFileLink(t)) {
+      await _add(t);
+    } else {
+      await _openInBrowser(t);
+    }
+  }
+
+  Future<void> _pasteIntoSearch() async {
+    final c = await Clipboard.getData('text/plain');
+    final t = c?.text?.trim();
+    if (t == null || t.isEmpty) return;
+    setState(() => _search.text = t);
+  }
+
+  Widget _hero() {
+    final cs = Theme.of(context).colorScheme;
+    final dark = cs.brightness == Brightness.dark;
+    final accent = dark ? _gold : const Color(0xFFB45309);
+    final sites = BrowserController.instance.shortcuts.take(8).toList();
+    Widget site(IconData? icon, String label, String? letter, VoidCallback f) =>
+        InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: f,
+          child: SizedBox(
+            width: 70,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: cs.onSurface.withValues(alpha: 0.07),
+                  shape: BoxShape.circle,
+                ),
+                child: icon != null
+                    ? Icon(icon, color: accent)
+                    : Text(letter ?? '',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                            color: accent)),
+              ),
+              const SizedBox(height: 6),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant)),
+            ]),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 40, 18, 10),
+      child: Column(children: [
+        Text('SDM',
+            style: TextStyle(
+                fontSize: 58,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+                color: accent)),
+        const SizedBox(height: 30),
+        Container(
+          height: 58,
+          decoration: BoxDecoration(
+            color: dark ? Colors.white.withValues(alpha: 0.04) : cs.surface,
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(color: cs.outlineVariant),
+          ),
+          child: Row(children: [
+            IconButton(
+              tooltip: tr('Paste'),
+              icon: Icon(Icons.file_download_outlined, color: cs.outline),
+              onPressed: _pasteIntoSearch,
+            ),
+            Expanded(
+              child: TextField(
+                controller: _search,
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.search,
+                onSubmitted: _go,
+                style: const TextStyle(fontSize: 16),
+                decoration: InputDecoration(
+                  hintText: tr('Search to download'),
+                  filled: false,
+                  isDense: true,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: IconButton.filled(
+                style: IconButton.styleFrom(
+                    backgroundColor: dark ? _gold : accent,
+                    foregroundColor: dark ? Colors.black : Colors.white,
+                    fixedSize: const Size(46, 46)),
+                icon: const Icon(Icons.search_rounded),
+                onPressed: () => _go(_search.text),
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 22),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            site(Icons.public_rounded, tr('Browser'), null,
+                () => _openInBrowser(null)),
+            for (final s in sites)
+              site(null, s.name, s.name.isEmpty ? '' : s.name[0].toUpperCase(),
+                  () => _openInBrowser(s.url)),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _tabBody(List<DownloadItem> items) {
+    const head = 4;
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 24),
+        itemCount: head + (items.isEmpty ? 1 : items.length),
+        itemBuilder: (_, i) {
+          if (i == 0) return const UpdateBanner();
+          if (i == 1) return _hero();
+          if (i == 2) return _summary();
+          if (i == 3) return _filters();
+          if (items.isEmpty) return SizedBox(height: 260, child: _empty());
+          final d = items[i - head];
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TweenAnimationBuilder<double>(
+              key: ValueKey('t_${d.id}'),
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+              builder: (_, v, child) => Opacity(
+                opacity: v,
+                child: Transform.translate(
+                    offset: Offset(0, (1 - v) * 14), child: child),
+              ),
+              child: _tile(d),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _summary() {
