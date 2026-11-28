@@ -68,6 +68,33 @@ class MediaMeta {
   }
 }
 
+/// Name, version and icon taken from inside an APK file.
+class ApkInfo {
+  final String label;
+  final String version;
+  final Uint8List? icon;
+  const ApkInfo(this.label, this.version, this.icon);
+}
+
+class ApkMeta {
+  static const _chan = MethodChannel('drom/apk');
+  static final Map<String, Future<ApkInfo?>> _mem = {};
+
+  static Future<ApkInfo?> of(String path) => _mem.putIfAbsent(path, () async {
+        try {
+          final r = await _chan
+              .invokeMethod<Map<Object?, Object?>>('info', {'path': path});
+          if (r == null) return null;
+          return ApkInfo((r['label'] as String?) ?? '',
+              (r['version'] as String?) ?? '', r['icon'] as Uint8List?);
+        } catch (_) {
+          return null;
+        }
+      });
+}
+
+bool isApkName(String n) => n.toLowerCase().endsWith('.apk');
+
 String formatDuration(int ms) {
   final s = ms ~/ 1000;
   final h = s ~/ 3600, m = (s % 3600) ~/ 60, x = s % 60;
@@ -109,6 +136,23 @@ class MediaThumb extends StatelessWidget {
           cacheWidth: (size * 3).round(),
           errorBuilder: (_, __, ___) => icon()));
     }
+    if (isApkName(name)) {
+      return FutureBuilder<ApkInfo?>(
+        future: ApkMeta.of(path),
+        builder: (_, snap) {
+          final ic = snap.data?.icon;
+          if (ic == null) return icon();
+          return Container(
+            width: size,
+            height: size,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08), borderRadius: radius),
+            child: Image.memory(ic, fit: BoxFit.contain, gaplessPlayback: true),
+          );
+        },
+      );
+    }
     if (!video && !audio) return icon();
     return FutureBuilder<MediaInfo?>(
       future: MediaMeta.of(path, audio: audio),
@@ -133,6 +177,28 @@ class MediaThumb extends StatelessWidget {
       },
     );
   }
+}
+
+/// The app name and version inside an APK ("WhatsApp · 2.24.1").
+class ApkLabel extends StatelessWidget {
+  final String path;
+  final String fallback;
+  final TextStyle? style;
+  const ApkLabel(
+      {super.key, required this.path, required this.fallback, this.style});
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<ApkInfo?>(
+        future: ApkMeta.of(path),
+        builder: (_, snap) {
+          final i = snap.data;
+          final t = (i == null || i.label.isEmpty)
+              ? fallback
+              : (i.version.isEmpty ? i.label : '${i.label} · ${i.version}');
+          return Text(t == fallback ? fallback : '$t  |  $fallback',
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: style);
+        },
+      );
 }
 
 /// "05:00" for a video or song (empty until known).

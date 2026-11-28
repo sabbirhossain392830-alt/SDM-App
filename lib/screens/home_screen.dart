@@ -774,6 +774,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final isVideo = isVideoName(d.fileName);
     final isAudio = isAudioName(d.fileName);
     final isImage = isImageName(d.fileName);
+    final isApk = isApkName(d.fileName);
     final sizeLabel = formatBytes(d.total > 0 ? d.total : d.downloaded);
 
     final selected = _sel.contains(d.id);
@@ -798,7 +799,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (done && !selected && (isVideo || isAudio || isImage))
+                  if (done && !selected && (isVideo || isAudio || isImage || isApk))
                     MediaThumb(path: d.savePath, size: 72)
                   else
                     Container(
@@ -842,6 +843,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                           fontSize: 13,
                                           color: cs.onSurfaceVariant)),
                                 ])
+                              else if (isApk)
+                                ApkLabel(
+                                    path: d.savePath,
+                                    fallback: sizeLabel,
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: cs.onSurfaceVariant))
                               else
                                 Text(status,
                                     style: TextStyle(
