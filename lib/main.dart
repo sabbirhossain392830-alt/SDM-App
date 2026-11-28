@@ -6,7 +6,7 @@ import 'l10n.dart';
 import 'link_intake.dart';
 import 'notifier.dart';
 import 'notify_settings.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_shell.dart';
 import 'theme.dart';
 import 'updater.dart';
 
@@ -51,7 +51,7 @@ class SdmApp extends StatelessWidget {
         themeMode: BrowserController.instance.themeMode,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
-        home: const HomeScreen(),
+        home: const MainShell(),
       ),
     );
   }
