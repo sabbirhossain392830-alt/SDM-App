@@ -51,7 +51,7 @@ flutter build apk --release
 ## Share and copy links
 - From any app, use **Share → SDM** on a file link and SDM shows the download prompt.
 - Copy a direct file link, then open SDM: it offers to download it.
-- Every link is checked first; web pages are refused, and YouTube links are not supported.
+- Every link is checked first; web pages are refused. YouTube links open a list where you pick video (with sound) or audio only.
 
 ## Project layout
 - `lib/download_manager.dart` – download engine (segments, pause/resume, Wi-Fi only)
