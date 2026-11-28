@@ -257,6 +257,8 @@ const Map<String, String> _bn = {
   'Browser': 'ব্রাউজার',
   'Add link': 'লিংক যোগ করুন',
   'Details': 'বিস্তারিত',
+  'Download from any site': 'যেকোনো সাইট থেকে ডাউনলোড করুন',
+  'Open a site, play the video, tap the download icon.': 'সাইট খুলুন, ভিডিও চালান, ডাউনলোড আইকনে ট্যাপ করুন।',
   'Copied link found': 'কপি করা লিংক পাওয়া গেছে — ট্যাপ করে ডাউনলোড',
   'Current speed': 'বর্তমান স্পিড',
   'Active': 'চলছে',
