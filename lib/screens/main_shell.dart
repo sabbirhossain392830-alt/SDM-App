@@ -16,6 +16,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _i = 0;
+  final GlobalKey<NavigatorState> _settingsNav = GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +31,14 @@ class _MainShellState extends State<MainShell> {
     return PopScope(
       canPop: _i == 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) setState(() => _i = 0);
+        if (didPop) return;
+        // inside a settings page: go back one page first
+        final n = _settingsNav.currentState;
+        if (_i == 2 && n != null && n.canPop()) {
+          n.pop();
+        } else {
+          setState(() => _i = 0);
+        }
       },
       child: Scaffold(
         body: IndexedStack(
@@ -38,7 +46,13 @@ class _MainShellState extends State<MainShell> {
           children: [
             const HomeScreen(tab: true),
             const HomeScreen(library: true),
-            const AppSettingsScreen(),
+            // its own navigator: settings pages open inside the tab, so the
+            // bottom bar stays
+            Navigator(
+              key: _settingsNav,
+              onGenerateRoute: (_) => MaterialPageRoute<void>(
+                  builder: (_) => const AppSettingsScreen()),
+            ),
           ],
         ),
         bottomNavigationBar: NavigationBarTheme(
