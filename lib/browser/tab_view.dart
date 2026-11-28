@@ -380,6 +380,13 @@ class _WebHostState extends State<_WebHost> {
   // at once (not only after the page finished loading).
   static const _hookJs = '''
 (function(){
+  // a hidden page (browser not on screen) stops its media
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden) return;
+    try{ document.querySelectorAll('video,audio').forEach(function(e){try{e.pause();}catch(x){}}); }catch(x){}
+  },true);
+})();
+(function(){
   if(window.__dromHook) return; window.__dromHook=true;
   function send(e){
     try{

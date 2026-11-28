@@ -319,6 +319,17 @@ class BrowserController extends ChangeNotifier {
   /// bar of the main window stays visible either way).
   final ValueNotifier<bool> visible = ValueNotifier(false);
 
+  /// Pauses every video / song on the page (and in same-site frames).
+  static const pauseMediaJs = r'''
+(function(){
+  function stop(d){
+    try{ d.querySelectorAll('video,audio').forEach(function(e){try{e.pause();}catch(x){}}); }catch(x){}
+    try{ d.querySelectorAll('iframe').forEach(function(f){ try{ if(f.contentDocument) stop(f.contentDocument); }catch(x){} }); }catch(x){}
+  }
+  stop(document);
+})();
+''';
+
   void openScreen() => visible.value = true;
   void closeScreen() => visible.value = false;
 

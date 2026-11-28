@@ -11,6 +11,11 @@ import java.security.MessageDigest
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import android.os.Handler
+import android.os.Looper
 import android.app.PictureInPictureParams
 import android.util.Rational
 import android.view.WindowManager
@@ -185,6 +190,51 @@ class MainActivity : FlutterActivity() {
                 // is this APK signed like the installed app? ("ok", "signature", "package", "invalid")
                 "apkCompat" -> result.success(apkCompat(ctx, call.argument<String>("path")))
                 else -> result.notImplemented()
+            }
+        }
+
+        // Thumbnails and length of videos / songs, made by Android itself.
+        MethodChannel(messenger, "drom/media").setMethodCallHandler { call, result ->
+            if (call.method != "info") {
+                result.notImplemented()
+            } else {
+                val path = call.argument<String>("path")
+                val audio = call.argument<Boolean>("audio") ?: false
+                Thread {
+                    var out: Map<String, Any?>? = null
+                    try {
+                        val r = MediaMetadataRetriever()
+                        r.setDataSource(path)
+                        val dur = r.extractMetadata(
+                            MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                        var bmp: Bitmap? = null
+                        if (audio) {
+                            val pic = r.embeddedPicture
+                            if (pic != null) {
+                                val o = BitmapFactory.Options()
+                                o.inSampleSize = 4
+                                bmp = BitmapFactory.decodeByteArray(pic, 0, pic.size, o)
+                            }
+                        } else {
+                            val at = Math.min(dur * 1000 / 10, 8_000_000L)
+                            bmp = r.getFrameAtTime(at, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                        }
+                        r.release()
+                        var bytes: ByteArray? = null
+                        if (bmp != null && bmp.width > 0) {
+                            val w = 360
+                            val h = Math.max(1, bmp.height * w / bmp.width)
+                            val sc = if (bmp.width > w) Bitmap.createScaledBitmap(bmp, w, h, true) else bmp
+                            val bo = java.io.ByteArrayOutputStream()
+                            sc.compress(Bitmap.CompressFormat.JPEG, 72, bo)
+                            bytes = bo.toByteArray()
+                        }
+                        out = mapOf("duration" to dur, "thumb" to bytes)
+                    } catch (e: Exception) {
+                        out = null
+                    }
+                    Handler(Looper.getMainLooper()).post { result.success(out) }
+                }.start()
             }
         }
 
