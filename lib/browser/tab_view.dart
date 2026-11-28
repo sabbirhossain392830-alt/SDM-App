@@ -8,7 +8,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'browser_controller.dart';
 import 'browser_tab.dart';
 import 'download_prompt.dart';
-import 'home_page.dart';
+import '../screens/home_hero.dart';
 import 'link_menu.dart';
 import 'page_dialogs.dart';
 import '../l10n.dart';
@@ -45,7 +45,23 @@ class TabView extends StatelessWidget {
               ),
             if (tab.error != null && !tab.showHome)
               Positioned.fill(child: _ErrorView(tab: tab, browser: browser)),
-            if (tab.showHome) Positioned.fill(child: HomePage(browser: browser)),
+            if (tab.showHome)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  child: SafeArea(
+                    child: SingleChildScrollView(
+                      child: HomeHero(
+                        onSubmit: (t) async {
+                          if (t.isEmpty) return;
+                          await browser.navigate(t, tab: tab);
+                        },
+                        onSite: (u) => browser.navigate(u, tab: tab),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },

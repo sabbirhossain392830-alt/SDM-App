@@ -53,8 +53,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
   @override
   void initState() {
     super.initState();
-    browser.screenOpen = true;
-    DownloadManager.instance.setBrowserOpen(true);
+    browser.visible.addListener(_onVisible);
+    _onVisible();
     _urlFocus.addListener(() {
       if (!_urlFocus.hasFocus && _editing && mounted) {
         setState(() => _editing = false);
@@ -62,8 +62,18 @@ class _BrowserScreenState extends State<BrowserScreen> {
     });
   }
 
+  /// The browser lives inside the main window: it keeps running while another
+  /// tab is shown, so "open" follows what is on screen.
+  void _onVisible() {
+    final v = browser.visible.value;
+    browser.screenOpen = v;
+    DownloadManager.instance.setBrowserOpen(v);
+    if (!v) FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   @override
   void dispose() {
+    browser.visible.removeListener(_onVisible);
     browser.screenOpen = false;
     DownloadManager.instance.setBrowserOpen(false);
     browser.detachAll(); // WebViews die with this screen
@@ -213,7 +223,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       browser.closeTab(browser.active);
       return;
     }
-    if (mounted) Navigator.pop(context);
+    if (mounted) browser.closeScreen();
   }
 
   void _showMenu() {
@@ -222,7 +232,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       browser,
       MenuActions(
         onDownloads: _openDownloads,
-        onReturn: () => Navigator.pop(context),
+        onReturn: browser.closeScreen,
         onFind: () {
           if (browser.current.showHome) return;
           _openFind();
@@ -248,18 +258,23 @@ class _BrowserScreenState extends State<BrowserScreen> {
   @override
   Widget build(BuildContext context) {
     browser.current.activated = true; // its WebView is created now
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _onBack();
-      },
-      // Outer builder follows tab list / active index changes; the inner one
-      // follows live changes of the active tab (title, URL, loading ...).
-      child: ListenableBuilder(
-        listenable: browser,
-        builder: (context, _) => ListenableBuilder(
-          listenable: browser.current,
-          builder: (context, _) => _scaffold(context),
+    // The browser sits in the main window even while another tab is shown:
+    // it only takes the back button while it is the one on screen.
+    return ValueListenableBuilder<bool>(
+      valueListenable: browser.visible,
+      builder: (context, shown, _) => PopScope(
+        canPop: !shown,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && shown) _onBack();
+        },
+        // Outer builder follows tab list / active index changes; the inner one
+        // follows live changes of the active tab (title, URL, loading ...).
+        child: ListenableBuilder(
+          listenable: browser,
+          builder: (context, _) => ListenableBuilder(
+            listenable: browser.current,
+            builder: (context, _) => _scaffold(context),
+          ),
         ),
       ),
     );
@@ -296,7 +311,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
             ),
             onPressed: () {
               FocusScope.of(context).unfocus();
-              Navigator.pop(context);
+              browser.closeScreen();
             },
           ),
           IconButton(

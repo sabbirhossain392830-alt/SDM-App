@@ -11,8 +11,8 @@ import '../theme.dart';
 import '../update_ui.dart';
 import '../updater.dart';
 import '../browser/browser_controller.dart';
-import '../browser/browser_screen.dart';
 import 'app_settings_screen.dart';
+import 'home_hero.dart';
 import '../flow_widgets.dart';
 import '../l10n.dart';
 
@@ -41,7 +41,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final dm = DownloadManager.instance;
   _Filter _filter = _Filter.all;
   final Set<String> _sel = {};
-  final TextEditingController _search = TextEditingController();
 
   bool get _selecting => _sel.isNotEmpty;
 
@@ -75,7 +74,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _search.dispose();
     dm.removeListener(_rebuild);
     dm.lowBattery.removeListener(_onLowBattery);
     UpdateChecker.instance.removeListener(_rebuild);
@@ -245,13 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openBrowser() async {
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        settings: const RouteSettings(name: kBrowserRoute),
-        builder: (_) => const BrowserScreen(),
-      ),
-    );
+    BrowserController.instance.openScreen();
   }
 
   Future<void> _confirmRemove(DownloadItem d) async {
@@ -553,234 +545,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ------------------------------------------------- Download tab (home)
 
-  // the colours of the SDM logo (blue vault)
-  static const _gold = Color(0xFF6FA3FF);
-  static const _blueDeep = Color(0xFF4A5BE0);
-
-  static bool _looksLikeFileLink(String t) {
-    final u = Uri.tryParse(t);
-    if (u == null || !(u.scheme == 'http' || u.scheme == 'https')) return false;
-    final last = u.pathSegments.isEmpty ? '' : u.pathSegments.last;
-    final m = RegExp(r'\.([A-Za-z0-9]{2,5})$').firstMatch(last);
-    if (m == null) return false;
-    const pages = {'html', 'htm', 'php', 'asp', 'aspx', 'jsp', 'xhtml'};
-    return !pages.contains(m.group(1)!.toLowerCase());
-  }
-
   Future<void> _openInBrowser(String? input) async {
     final b = BrowserController.instance;
     if (input != null && input.trim().isNotEmpty) {
       b.newTab(url: BrowserController.resolveInput(input));
     }
-    await _openBrowser();
-  }
-
-  /// Search box: a file link starts the download popup, a web address or
-  /// words open the browser.
-  Future<void> _go(String text) async {
-    final t = text.trim();
-    FocusManager.instance.primaryFocus?.unfocus();
-    if (t.isEmpty) {
-      await _openInBrowser(null);
-      return;
-    }
-    _search.clear();
-    if (_looksLikeFileLink(t)) {
-      await _add(t);
-    } else {
-      await _openInBrowser(t);
-    }
-  }
-
-  Future<void> _pasteIntoSearch() async {
-    final c = await Clipboard.getData('text/plain');
-    final t = c?.text?.trim();
-    if (t == null || t.isEmpty) return;
-    setState(() => _search.text = t);
-  }
-
-  Widget _hero() {
-    final cs = Theme.of(context).colorScheme;
-    final dark = cs.brightness == Brightness.dark;
-    final accent = dark ? _gold : _blueDeep;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 40, 18, 10),
-      child: Column(children: [
-        ShaderMask(
-          shaderCallback: (r) => const LinearGradient(
-            colors: [Color(0xFF4040D0), Color(0xFF6090F0)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ).createShader(r),
-          blendMode: BlendMode.srcIn,
-          child: const Text('SDM',
-              style: TextStyle(
-                  fontSize: 58,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                  color: Colors.white)),
-        ),
-        const SizedBox(height: 30),
-        Container(
-          height: 58,
-          decoration: BoxDecoration(
-            color: dark ? Colors.white.withValues(alpha: 0.04) : cs.surface,
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: cs.outlineVariant),
-          ),
-          child: Row(children: [
-            IconButton(
-              tooltip: tr('Paste'),
-              icon: Icon(Icons.file_download_outlined, color: cs.outline),
-              onPressed: _pasteIntoSearch,
-            ),
-            Expanded(
-              child: TextField(
-                controller: _search,
-                keyboardType: TextInputType.url,
-                textInputAction: TextInputAction.search,
-                onSubmitted: _go,
-                style: const TextStyle(fontSize: 16),
-                decoration: InputDecoration(
-                  hintText: tr('Search to download'),
-                  filled: false,
-                  isDense: true,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: IconButton.filled(
-                style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFF4F6FF0),
-                    foregroundColor: Colors.white,
-                    fixedSize: const Size(46, 46)),
-                icon: const Icon(Icons.search_rounded),
-                onPressed: () => _go(_search.text),
-              ),
-            ),
-          ]),
-        ),
-        const SizedBox(height: 22),
-        _shortcuts(),
-      ]),
-    );
-  }
-
-  /// Sites under the search box. Tap opens the site in the browser, long press
-  /// removes it, and the + button adds a new one.
-  Widget _shortcuts() {
-    final cs = Theme.of(context).colorScheme;
-    final dark = cs.brightness == Brightness.dark;
-    final accent = dark ? _gold : _blueDeep;
-    final b = BrowserController.instance;
-    Widget tile(Widget child, String label,
-            {VoidCallback? onTap, VoidCallback? onLong}) =>
-        InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          onLongPress: onLong,
-          child: SizedBox(
-            width: 74,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                width: 48,
-                height: 48,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: cs.onSurface.withValues(alpha: 0.07),
-                  shape: BoxShape.circle,
-                ),
-                child: child,
-              ),
-              const SizedBox(height: 6),
-              Text(label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant)),
-            ]),
-          ),
-        );
-    return ListenableBuilder(
-      listenable: b,
-      builder: (context, _) => Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 4,
-        runSpacing: 10,
-        children: [
-          for (final sc in b.shortcuts.take(11))
-            tile(
-              Text(sc.name.isEmpty ? '?' : sc.name[0].toUpperCase(),
-                  style: TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 19, color: accent)),
-              sc.name,
-              onTap: () => _openInBrowser(sc.url),
-              onLong: () => _removeShortcut(sc),
-            ),
-          tile(Icon(Icons.add_rounded, color: accent), tr('Add shortcut'),
-              onTap: _addShortcut),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _addShortcut() async {
-    final name = TextEditingController();
-    final url = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const T('Add shortcut'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: name,
-            decoration: InputDecoration(hintText: tr('Name')),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: url,
-            keyboardType: TextInputType.url,
-            decoration: InputDecoration(hintText: tr('Website address')),
-            onSubmitted: (_) => Navigator.pop(ctx, true),
-          ),
-        ]),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const T('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const T('Add')),
-        ],
-      ),
-    );
-    final u = url.text.trim();
-    if (ok == true && u.isNotEmpty) {
-      await BrowserController.instance.addShortcut(name.text, u);
-    }
-  }
-
-  Future<void> _removeShortcut(Shortcut sc) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(sc.name),
-        content: const T('Remove this shortcut?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const T('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const T('Remove')),
-        ],
-      ),
-    );
-    if (ok == true) await BrowserController.instance.removeShortcut(sc);
+    b.openScreen();
   }
 
   Widget _tabBody() {
@@ -789,7 +559,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 24),
-        children: [const UpdateBanner(), _hero()],
+        children: [
+          const UpdateBanner(),
+          HomeHero(
+            onSubmit: (t) => _openInBrowser(t),
+            onSite: (u) => _openInBrowser(u),
+          ),
+        ],
       ),
     );
   }

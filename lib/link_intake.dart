@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'browser/browser_controller.dart';
-import 'browser/browser_screen.dart';
 import 'browser/download_prompt.dart';
 import 'download_manager.dart';
 import 'models.dart';
@@ -136,15 +135,9 @@ class LinkIntake with WidgetsBindingObserver {
     }
     final b = BrowserController.instance;
     b.newTab(url: url);
-    if (b.screenOpen) {
-      // browser is already somewhere in the stack (maybe under Downloads)
-      nav.popUntil((r) => r.isFirst || r.settings.name == kBrowserRoute);
-    } else {
-      nav.push(MaterialPageRoute<void>(
-        settings: const RouteSettings(name: kBrowserRoute),
-        builder: (_) => const BrowserScreen(),
-      ));
-    }
+    // close any page on top, then show the browser in the main window
+    nav.popUntil((r) => r.isFirst);
+    b.openScreen();
   }
 
   /// A copied link: only offered when it clearly points at a file.
