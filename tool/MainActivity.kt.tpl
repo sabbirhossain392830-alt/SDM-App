@@ -193,6 +193,37 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // Name, version and icon of an APK file.
+        MethodChannel(messenger, "drom/apk").setMethodCallHandler { call, result ->
+            val path = call.argument<String>("path")
+            Thread {
+                var out: Map<String, Any?>? = null
+                try {
+                    val pm = ctx.packageManager
+                    val pi = pm.getPackageArchiveInfo(path ?: "", 0)
+                    val ai = pi?.applicationInfo
+                    if (pi != null && ai != null) {
+                        ai.sourceDir = path
+                        ai.publicSourceDir = path
+                        val label = pm.getApplicationLabel(ai).toString()
+                        val dr = ai.loadIcon(pm)
+                        val w = 160
+                        val bmp = Bitmap.createBitmap(w, w, Bitmap.Config.ARGB_8888)
+                        val cv = android.graphics.Canvas(bmp)
+                        dr.setBounds(0, 0, w, w)
+                        dr.draw(cv)
+                        val bo = java.io.ByteArrayOutputStream()
+                        bmp.compress(Bitmap.CompressFormat.PNG, 100, bo)
+                        out = mapOf("label" to label, "version" to (pi.versionName ?: ""),
+                            "icon" to bo.toByteArray())
+                    }
+                } catch (e: Exception) {
+                    out = null
+                }
+                Handler(Looper.getMainLooper()).post { result.success(out) }
+            }.start()
+        }
+
         // Thumbnails and length of videos / songs, made by Android itself.
         MethodChannel(messenger, "drom/media").setMethodCallHandler { call, result ->
             if (call.method != "info") {
