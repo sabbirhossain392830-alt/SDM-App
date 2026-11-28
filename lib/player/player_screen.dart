@@ -272,27 +272,48 @@ class _PlayerScreenState extends State<PlayerScreen>
     'it': 'Italian', 'ita': 'Italian', 'ne': 'Nepali', 'nep': 'Nepali',
   };
 
+  /// Only the language of a sound track ("Hindi", "English"): no site names,
+  /// codecs or brackets.
   String _trackName(dynamic t, int index) {
-    String? s(dynamic v) {
-      final x = v?.toString().trim();
-      return (x == null || x.isEmpty || x == 'und' || x == 'null') ? null : x;
+    String? v(dynamic x) {
+      final y = x?.toString().trim();
+      return (y == null || y.isEmpty || y == 'und' || y == 'null') ? null : y;
     }
 
-    final label = s(t.label);
-    final lang = s(t.language);
-    final langName = lang == null
-        ? null
-        : (_langs[lang.toLowerCase().split('-').first] ?? lang);
-    final parts = <String>[
-      if (label != null) label else if (langName != null) langName else '${tr('Audio')} ${index + 1}',
-      if (label != null && langName != null && !label.toLowerCase().contains(langName.toLowerCase())) langName,
+    final lang = v(t.language);
+    final label = v(t.label);
+    if (lang != null) {
+      final n = _langs[lang.toLowerCase().split('-').first];
+      if (n != null) return n;
+    }
+    if (label != null) {
+      final low = label.toLowerCase();
+      for (final n in _langs.values.toSet()) {
+        if (low.contains(n.toLowerCase())) return n;
+      }
+      var first = label.split(RegExp(r'[|\[\(]')).first;
+      first = first
+          .replaceAll(
+              RegExp(r'\S+\.(com|net|one|org|tv|info|xyz|me|cc)\S*',
+                  caseSensitive: false),
+              '')
+          .trim();
+      if (first.isNotEmpty) return first;
+    }
+    if (lang != null) return lang;
+    return '${tr('Audio')} ${index + 1}';
+  }
+
+  /// Names for the list; the same language twice becomes "Hindi 1", "Hindi 2".
+  List<String> _trackNames() {
+    final base = [for (var i = 0; i < _tracks.length; i++) _trackName(_tracks[i], i)];
+    final seen = <String, int>{};
+    return [
+      for (final n in base)
+        base.where((x) => x == n).length > 1
+            ? '$n ${seen[n] = (seen[n] ?? 0) + 1}'
+            : n
     ];
-    final extra = <String>[];
-    final codec = s(t.codec);
-    if (codec != null) extra.add(codec.replaceAll(RegExp(r'^audio/'), '').toUpperCase());
-    final ch = t.channelCount;
-    if (ch is int && ch > 0) extra.add(ch == 1 ? 'Mono' : (ch == 2 ? 'Stereo' : '$ch ch'));
-    return extra.isEmpty ? parts.join(' · ') : '${parts.join(' · ')}  (${extra.join(', ')})';
   }
 
   void _setSleep(int minutes) {
@@ -772,20 +793,18 @@ class _PlayerScreenState extends State<PlayerScreen>
       onDoubleTapDown: (d) => _lastTapX = d.localPosition.dx,
       onDoubleTap: () {
         if (_locked || _isAudio) return;
-        if (_zoom > 1.01) {
-          // zoomed in: a double tap brings the picture back
-          setState(() {
-            _zoom = 1;
-            _pan = Offset.zero;
-          });
-          _showHud(Icons.zoom_out_rounded, '1x');
-          return;
-        }
         final x = _lastTapX;
         if (x < size.width / 3) {
           _seekBy(-10);
         } else if (x > size.width * 2 / 3) {
           _seekBy(10);
+        } else if (_zoom > 1.01) {
+          // zoomed in: a double tap in the middle brings the picture back
+          setState(() {
+            _zoom = 1;
+            _pan = Offset.zero;
+          });
+          _showHud(Icons.zoom_out_rounded, '1x');
         } else {
           _playPause();
         }
@@ -873,9 +892,9 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Widget _controls() {
     final c = _c;
-    final visible = _ui || _locked && _ui;
+    final visible = _ui && _panel == null;
     return IgnorePointer(
-      ignoring: !_ui,
+      ignoring: !visible,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
         opacity: visible ? 1 : 0,
@@ -1009,8 +1028,15 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ),
               ]),
               Padding(
-                padding: const EdgeInsets.only(left: 8, top: 4),
-                child: Row(children: [
+                padding: const EdgeInsets.only(left: 12, top: 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
                   PopupMenuButton<String>(
                     tooltip: tr('Speed'),
                     onSelected: (v) => _setSpeed(double.parse(v)),
@@ -1034,6 +1060,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                   plain(Icons.replay_10_rounded, () => _seekBy(-10), size: 26),
                   plain(Icons.forward_10_rounded, () => _seekBy(10), size: 26),
                 ]),
+              ),
+                ),
               ),
             ]),
           ),
@@ -1073,9 +1101,13 @@ class _PlayerScreenState extends State<PlayerScreen>
                     plain(Icons.skip_previous_rounded,
                         _i > 0 ? () => _load(_i - 1) : null, size: 38),
                     const SizedBox(width: 22),
-                    IconButton(
-                      iconSize: 54,
-                      color: Colors.white,
+                    IconButton.filledTonal(
+                      iconSize: 44,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.18),
+                        foregroundColor: Colors.white,
+                        fixedSize: const Size(68, 68),
+                      ),
                       icon: Icon(playing
                           ? Icons.pause_rounded
                           : (_ended
@@ -1116,20 +1148,41 @@ class _PlayerScreenState extends State<PlayerScreen>
               style: const TextStyle(
                   color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
         );
-    Widget radio(String t, bool on, VoidCallback? f) => InkWell(
-          onTap: f,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(children: [
-              Icon(on ? Icons.radio_button_checked : Icons.radio_button_off,
-                  color: on ? const Color(0xFF60A5FA) : Colors.white54, size: 28),
-              const SizedBox(width: 14),
-              Expanded(
-                  child: Text(t,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 17))),
-            ]),
+    Widget radio(String t, bool on, VoidCallback? f) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Material(
+            color: on
+                ? const Color(0xFF60A5FA).withValues(alpha: 0.16)
+                : Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: f,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: on ? const Color(0xFF60A5FA) : Colors.transparent,
+                      width: 1.4),
+                ),
+                child: Row(children: [
+                  Expanded(
+                      child: Text(t,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight:
+                                  on ? FontWeight.w700 : FontWeight.w500))),
+                  if (on)
+                    const Icon(Icons.check_circle_rounded,
+                        color: Color(0xFF60A5FA), size: 24),
+                ]),
+              ),
+            ),
           ),
         );
     Widget stepper(String label, String value, VoidCallback minus, VoidCallback plus) =>
@@ -1162,9 +1215,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_tracks.isEmpty)
           radio(tr('Default audio track'), true, null)
         else
-          for (var i = 0; i < _tracks.length; i++)
-            radio(_trackName(_tracks[i], i), _tracks[i].isSelected == true,
-                () => _pickTrack(_tracks[i])),
+          for (final e in _trackNames().asMap().entries)
+            radio(e.value, _tracks[e.key].isSelected == true,
+                () => _pickTrack(_tracks[e.key])),
         const Divider(color: Colors.white12),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1242,7 +1295,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         bottom: 0,
         width: w > 700 ? 430 : w * 0.8,
         child: Material(
-          color: Colors.black.withValues(alpha: 0.88),
+          color: const Color(0xF2101418),
+          borderRadius:
+              const BorderRadius.horizontal(left: Radius.circular(22)),
+          clipBehavior: Clip.antiAlias,
           child: SafeArea(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
