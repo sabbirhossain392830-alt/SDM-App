@@ -1,5 +1,4 @@
 import '../pull_refresh.dart';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
@@ -29,8 +28,8 @@ class MediaBubble extends StatefulWidget {
 }
 
 class _MediaBubbleState extends State<MediaBubble> {
-  static const double _w = 70;
-  static const double _h = 34;
+  static const double _w = 78;
+  static const double _h = 40;
   Offset? _drag; // pixel position while dragging
 
   @override
@@ -75,55 +74,39 @@ class _MediaBubbleState extends State<MediaBubble> {
                 curve: Curves.easeOutBack,
                 builder: (_, v, child) => Transform.scale(scale: v, child: child),
                 // glass: see-through, frosted, so the page stays visible
-                child: DecoratedBox(
+                child: Container(
+                  width: _w,
+                  height: _h,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(_h / 2),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xE64A5BE0), Color(0xE66FA3FF)],
+                    ),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.85), width: 1.5),
                     boxShadow: [
                       BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.18),
-                          blurRadius: _drag != null ? 14 : 8,
+                          color: const Color(0xFF4A5BE0).withValues(alpha: 0.45),
+                          blurRadius: _drag != null ? 16 : 10,
                           offset: const Offset(0, 3)),
                     ],
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(_h / 2),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        width: _w,
-                        height: _h,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(_h / 2),
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.white.withValues(alpha: dark ? 0.22 : 0.55),
-                              Colors.white.withValues(alpha: dark ? 0.08 : 0.25),
-                            ],
-                          ),
-                          border: Border.all(
-                              color: Colors.white
-                                  .withValues(alpha: dark ? 0.35 : 0.8)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.download_rounded,
-                                color: const Color(0xFF5AB4FF),
-                                size: 20),
-                            if (n > 1) ...[
-                              const SizedBox(width: 4),
-                              Text('$n',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: const Color(0xFF5AB4FF))),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.download_rounded,
+                          color: Colors.white, size: 23),
+                      if (n > 1) ...[
+                        const SizedBox(width: 5),
+                        Text('$n',
+                            style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white)),
+                      ],
+                    ],
                   ),
                 ),
               ),

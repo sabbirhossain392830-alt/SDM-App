@@ -1017,13 +1017,7 @@ class _AddLinkButtonState extends State<_AddLinkButton>
       duration: const Duration(milliseconds: 420),
       reverseDuration: const Duration(milliseconds: 260));
 
-  late final Animation<double> _scale = TweenSequence<double>([
-    TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.86), weight: 30),
-    TweenSequenceItem(tween: Tween(begin: 0.86, end: 1.06), weight: 40),
-    TweenSequenceItem(tween: Tween(begin: 1.06, end: 1.0), weight: 30),
-  ]).animate(CurvedAnimation(parent: _c, curve: Curves.easeOut));
-
-  late final Animation<double> _turn = Tween<double>(begin: 0, end: 0.125)
+  late final Animation<double> _turn = Tween<double>(begin: 0, end: 0.5)
       .animate(CurvedAnimation(parent: _c, curve: Curves.easeOutBack));
 
   bool _opening = false;
@@ -1058,31 +1052,29 @@ class _AddLinkButtonState extends State<_AddLinkButton>
           child: Transform.scale(scale: 0.4 + 0.6 * v, child: child),
         ),
       ),
-      child: ScaleTransition(
-        scale: _scale,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                  color: const Color(0xFF4A5BE0).withValues(alpha: 0.35),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6)),
-            ],
-          ),
-          child: FloatingActionButton.extended(
-            elevation: 0,
-            focusElevation: 0,
-            hoverElevation: 0,
-            highlightElevation: 0,
-            backgroundColor: const Color(0xFF4A5BE0),
-            foregroundColor: Colors.white,
-            onPressed: _tap,
-            icon: RotationTransition(
-                turns: _turn, child: const Icon(Icons.add_rounded)),
-            label: const T('Add link',
-                style: TextStyle(fontWeight: FontWeight.w700)),
-          ),
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+                color: const Color(0xFF4A5BE0).withValues(alpha: 0.35),
+                blurRadius: 14,
+                offset: const Offset(0, 5)),
+          ],
+        ),
+        child: FloatingActionButton.small(
+          heroTag: 'add_link',
+          elevation: 0,
+          focusElevation: 0,
+          hoverElevation: 0,
+          highlightElevation: 0,
+          shape: const CircleBorder(),
+          backgroundColor: const Color(0xFF4A5BE0),
+          foregroundColor: Colors.white,
+          tooltip: tr('Add link'),
+          onPressed: _tap,
+          child: RotationTransition(
+              turns: _turn, child: const Icon(Icons.add_rounded, size: 26)),
         ),
       ),
     );
