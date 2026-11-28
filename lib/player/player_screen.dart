@@ -71,6 +71,8 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
+enum _Panel { audio, sub }
+
 class _Hud {
   final IconData icon;
   final String text;
@@ -93,6 +95,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   BoxFit _fit = BoxFit.contain;
   List<SubCue> _cues = const [];
   bool _subsOn = true;
+  _Panel? _panel;
+  String? _subFile;
   int _subOffsetMs = 0;
   double? _dragV; // seek bar being dragged (ms)
   Timer? _hideT, _saveT, _hudT;
@@ -201,7 +205,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() => _c = c);
     _kickHide();
     loadSubtitles(path).then((s) {
-      if (mounted && id == _loadId) setState(() => _cues = s);
+      if (mounted && id == _loadId) {
+        setState(() {
+          _cues = s;
+          _subFile = s.isEmpty ? null : '${path.substring(0, path.lastIndexOf('.'))}.srt';
+        });
+      }
     });
   }
 
@@ -265,7 +274,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     _hideT?.cancel();
     if (_isAudio) return;
     _hideT = Timer(const Duration(seconds: 4), () {
-      if (mounted && (_c?.value.isPlaying ?? false)) setState(() => _ui = false);
+      if (mounted && _panel == null && (_c?.value.isPlaying ?? false)) {
+        setState(() => _ui = false);
+      }
     });
   }
 
@@ -453,6 +464,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               if (_err != null) _errorView(),
               if (!_pip && _err == null) _hudView(),
               if (!_pip && _err == null) _controls(),
+              if (!_pip && _err == null && _panel != null) _panelView(),
             ],
           );
         }),
@@ -669,8 +681,20 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Widget _fullControls(VideoPlayerController? c) {
     final playing = c?.value.isPlaying ?? false;
+    Widget plain(IconData i, VoidCallback? f, {double size = 28}) => IconButton(
+          iconSize: size,
+          color: Colors.white,
+          disabledColor: Colors.white24,
+          icon: Icon(i),
+          onPressed: f == null
+              ? null
+              : () {
+                  f();
+                  _kickHide();
+                },
+        );
     return Stack(children: [
-      // top
+      // top: back, name, subtitles, audio, more  (+ a small row under it)
       Positioned(
         left: 0,
         right: 0,
@@ -685,70 +709,66 @@ class _PlayerScreenState extends State<PlayerScreen>
           ),
           child: SafeArea(
             bottom: false,
-            child: Row(children: [
-              _icon(Icons.arrow_back_rounded, () => Navigator.maybePop(context)),
-              Expanded(
-                child: Text(_list.isEmpty ? '' : _name(_list[_i]),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600)),
-              ),
-              if (_cues.isNotEmpty)
-                _icon(
-                    _subsOn
-                        ? Icons.closed_caption_rounded
-                        : Icons.closed_caption_disabled_rounded,
-                    () => setState(() => _subsOn = !_subsOn)),
-              PopupMenuButton<String>(
-                tooltip: tr('Speed'),
-                icon: const Icon(Icons.speed_rounded, color: Colors.white),
-                onSelected: (v) => _setSpeed(double.parse(v)),
-                itemBuilder: (_) => [
-                  for (final s in const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0])
-                    CheckedPopupMenuItem<String>(
-                        value: '$s', checked: _speed == s, child: Text('${s}x')),
-                ],
-              ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-                onSelected: (v) {
-                  switch (v) {
-                    case 'pip':
-                      _enterPip();
-                    case 'ext':
-                      _external();
-                    case 'sub+':
-                      setState(() => _subOffsetMs += 500);
-                      _showHud(Icons.subtitles_rounded,
-                          '${(_subOffsetMs / 1000).toStringAsFixed(1)} s');
-                    case 'sub-':
-                      setState(() => _subOffsetMs -= 500);
-                      _showHud(Icons.subtitles_rounded,
-                          '${(_subOffsetMs / 1000).toStringAsFixed(1)} s');
-                  }
-                },
-                itemBuilder: (_) => [
-                  if (!_isAudio)
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                plain(Icons.arrow_back_rounded, () => Navigator.maybePop(context)),
+                Expanded(
+                  child: Text(_list.isEmpty ? '' : _name(_list[_i]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500)),
+                ),
+                plain(Icons.music_note_rounded,
+                    () => setState(() => _panel = _Panel.audio)),
+                if (!_isAudio)
+                  plain(Icons.subtitles_rounded,
+                      () => setState(() => _panel = _Panel.sub)),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+                  onSelected: (v) {
+                    if (v == 'ext') _external();
+                  },
+                  itemBuilder: (_) => [
                     PopupMenuItem(
-                        value: 'pip', child: Text(tr('Picture in picture'))),
-                  PopupMenuItem(
-                      value: 'ext', child: Text(tr('Open in another player'))),
-                  if (_cues.isNotEmpty) ...[
-                    PopupMenuItem(
-                        value: 'sub+', child: Text(tr('Subtitles later +0.5 s'))),
-                    PopupMenuItem(
-                        value: 'sub-', child: Text(tr('Subtitles earlier −0.5 s'))),
+                        value: 'ext', child: Text(tr('Open in another player'))),
                   ],
-                ],
+                ),
+              ]),
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 4),
+                child: Row(children: [
+                  PopupMenuButton<String>(
+                    tooltip: tr('Speed'),
+                    onSelected: (v) => _setSpeed(double.parse(v)),
+                    itemBuilder: (_) => [
+                      for (final x in const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0])
+                        CheckedPopupMenuItem<String>(
+                            value: '$x', checked: _speed == x, child: Text('${x}x')),
+                    ],
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Text(
+                          '${_speed == _speed.roundToDouble() ? _speed.toInt() : _speed}X',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  if (!_isAudio)
+                    plain(Icons.screen_rotation_rounded, _rotate, size: 26),
+                  plain(Icons.replay_10_rounded, () => _seekBy(-10), size: 26),
+                  plain(Icons.forward_10_rounded, () => _seekBy(10), size: 26),
+                ]),
               ),
             ]),
           ),
         ),
       ),
-      // bottom
+      // bottom: seek bar, then lock | previous play next | fit, picture-in-picture
       Positioned(
         left: 0,
         right: 0,
@@ -765,31 +785,190 @@ class _PlayerScreenState extends State<PlayerScreen>
             top: false,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               if (c != null) _seekBar(c),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                _icon(Icons.lock_open_rounded, () => setState(() {
-                      _locked = true;
-                      _ui = false;
-                    }), size: 22),
-                _icon(Icons.skip_previous_rounded,
-                    _i > 0 ? () => _load(_i - 1) : null, size: 30),
-                _icon(Icons.replay_10_rounded, () => _seekBy(-10), size: 28),
-                IconButton.filled(
-                  iconSize: 34,
-                  icon: Icon(playing
-                      ? Icons.pause_rounded
-                      : (_ended ? Icons.replay_rounded : Icons.play_arrow_rounded)),
-                  onPressed: _playPause,
-                ),
-                _icon(Icons.forward_10_rounded, () => _seekBy(10), size: 28),
-                _icon(Icons.skip_next_rounded,
-                    _i + 1 < _list.length ? () => _load(_i + 1) : null, size: 30),
-                if (!_isAudio) ...[
-                  _icon(Icons.aspect_ratio_rounded, _cycleFit, size: 22),
-                  _icon(Icons.screen_rotation_rounded, _rotate, size: 22),
-                ],
-              ]),
-              const SizedBox(height: 4),
+              SizedBox(
+                height: 64,
+                child: Stack(alignment: Alignment.center, children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: plain(
+                        Icons.lock_open_rounded,
+                        () => setState(() {
+                              _locked = true;
+                              _ui = false;
+                            }),
+                        size: 26),
+                  ),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    plain(Icons.skip_previous_rounded,
+                        _i > 0 ? () => _load(_i - 1) : null, size: 38),
+                    const SizedBox(width: 22),
+                    IconButton(
+                      iconSize: 54,
+                      color: Colors.white,
+                      icon: Icon(playing
+                          ? Icons.pause_rounded
+                          : (_ended
+                              ? Icons.replay_rounded
+                              : Icons.play_arrow_rounded)),
+                      onPressed: _playPause,
+                    ),
+                    const SizedBox(width: 22),
+                    plain(Icons.skip_next_rounded,
+                        _i + 1 < _list.length ? () => _load(_i + 1) : null,
+                        size: 38),
+                  ]),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (!_isAudio) plain(Icons.aspect_ratio_rounded, _cycleFit, size: 26),
+                      if (!_isAudio)
+                        plain(Icons.picture_in_picture_alt_rounded, _enterPip,
+                            size: 26),
+                    ]),
+                  ),
+                ]),
+              ),
             ]),
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  // ------------------------------------------------- side panel (audio / subtitles)
+
+  Widget _panelView() {
+    final w = MediaQuery.sizeOf(context).width;
+    Widget head(String t) => Padding(
+          padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
+          child: Text(t,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+        );
+    Widget radio(String t, bool on, VoidCallback? f) => InkWell(
+          onTap: f,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(children: [
+              Icon(on ? Icons.radio_button_checked : Icons.radio_button_off,
+                  color: on ? const Color(0xFF60A5FA) : Colors.white54, size: 28),
+              const SizedBox(width: 14),
+              Expanded(
+                  child: Text(t,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 17))),
+            ]),
+          ),
+        );
+    Widget stepper(String label, String value, VoidCallback minus, VoidCallback plus) =>
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(children: [
+            Expanded(
+                child: Text(label,
+                    style: const TextStyle(color: Colors.white, fontSize: 17))),
+            IconButton.filledTonal(
+                icon: const Icon(Icons.remove_rounded), onPressed: minus),
+            Container(
+              width: 84,
+              height: 40,
+              alignment: Alignment.center,
+              margin: const EdgeInsets.symmetric(horizontal: 6),
+              decoration: BoxDecoration(
+                  color: Colors.white10, borderRadius: BorderRadius.circular(6)),
+              child: Text(value,
+                  style: const TextStyle(color: Colors.white, fontSize: 16)),
+            ),
+            IconButton.filledTonal(
+                icon: const Icon(Icons.add_rounded), onPressed: plus),
+          ]),
+        );
+    final audio = _panel == _Panel.audio;
+    final children = <Widget>[
+      if (audio) ...[
+        head(tr('Audio track')),
+        radio(tr('Default audio track'), true, null),
+        const Divider(color: Colors.white12),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            Icon(_vol == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                color: Colors.white),
+            Expanded(
+              child: Slider(
+                value: _vol,
+                onChanged: (x) {
+                  setState(() => _vol = x);
+                  _chan.invokeMethod('setVolume', x).catchError((_) {});
+                },
+              ),
+            ),
+            Text('${(_vol * 100).round()}%',
+                style: const TextStyle(color: Colors.white)),
+          ]),
+        ),
+        const Divider(color: Colors.white12),
+        InkWell(
+          onTap: () {
+            setState(() => _panel = null);
+            _external();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(children: [
+              const Icon(Icons.open_in_new_rounded, color: Colors.white),
+              const SizedBox(width: 14),
+              Expanded(
+                  child: Text(tr('Other audio tracks or sound missing? Open in another player'),
+                      style: const TextStyle(color: Colors.white, fontSize: 15))),
+            ]),
+          ),
+        ),
+      ] else ...[
+        head(tr('Subtitle')),
+        radio(tr('Disable'), !_subsOn || _cues.isEmpty,
+            () => setState(() => _subsOn = false)),
+        if (_cues.isNotEmpty)
+          radio(
+              _name(_subFile ?? tr('Subtitle file')),
+              _subsOn,
+              () => setState(() => _subsOn = true))
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Text(
+                tr('No subtitle found. Put an .srt or .vtt file with the same name next to the video.'),
+                style: const TextStyle(color: Colors.white60, fontSize: 14)),
+          ),
+        const Divider(color: Colors.white12),
+        stepper(
+            tr('Synchronization'),
+            '${(_subOffsetMs / 1000).toStringAsFixed(2)}s',
+            () => setState(() => _subOffsetMs -= 250),
+            () => setState(() => _subOffsetMs += 250)),
+      ],
+    ];
+    return Stack(children: [
+      Positioned.fill(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _panel = null),
+          child: Container(color: Colors.black38),
+        ),
+      ),
+      Positioned(
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: w > 700 ? 430 : w * 0.8,
+        child: Material(
+          color: Colors.black.withValues(alpha: 0.88),
+          child: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: children,
+            ),
           ),
         ),
       ),
