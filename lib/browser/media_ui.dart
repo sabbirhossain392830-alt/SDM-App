@@ -166,6 +166,15 @@ String? _nameFromUrl(MediaEntry e) {
   }
   final dot = n.lastIndexOf('.');
   if (dot > 0) n = n.substring(0, dot);
+  // random id / token (mixed case + digits, no spaces) is not a name
+  if (!n.contains(' ') &&
+      !n.contains('.') &&
+      n.length >= 14 &&
+      RegExp(r'[A-Z]').hasMatch(n) &&
+      RegExp(r'[a-z]').hasMatch(n) &&
+      RegExp(r'\d').hasMatch(n)) {
+    return null;
+  }
   n = n.replaceAll(RegExp(r'[_+]+'), ' ').trim();
   final letters = RegExp(r'[A-Za-zঀ-৿]').allMatches(n).length;
   if (n.length < 6 || letters < 4) return null;
@@ -183,25 +192,44 @@ String? _nameFromUrl(MediaEntry e) {
 
 /// The title the page itself shows for the video (read from the live page).
 Future<String> _pageTitle(BrowserTab tab) async {
-  var best = '';
+  final cands = <String>[];
   try {
     final r = await tab.controller?.evaluateJavascript(source: r"""
 (function(){
   function q(s){var e=document.querySelector(s);
-    return e?String(e.content||e.textContent||'').replace(/\s+/g,' ').trim():'';}
-  return JSON.stringify([q('meta[property="og:title"]'),q('h1'),document.title]);
+    return e?String(e.content||e.textContent||e.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim():'';}
+  return JSON.stringify([q('meta[property="og:title"]'),q('h1'),
+    q('meta[property="og:description"]'),q('video[aria-label]'),document.title]);
 })()
 """);
-    final l = (jsonDecode(r.toString()) as List).cast<String>();
-    for (final t in l) {
-      if (t.length >= 3) {
-        best = t;
-        break;
-      }
-    }
+    cands.addAll((jsonDecode(r.toString()) as List).cast<String>());
   } catch (_) {}
-  if (best.isEmpty) best = tab.title;
-  if (best.isEmpty) best = tab.host;
+  cands.add(tab.title);
+  final site = tab.host
+      .toLowerCase()
+      .replaceFirst(RegExp(r'^(www|m|mobile|web)\.'), '')
+      .split('.')
+      .first;
+  bool bad(String t) {
+    final l = t.toLowerCase().trim();
+    if (l.length < 3) return true;
+    if (l == site || l == tab.host.toLowerCase()) return true;
+    if (RegExp(r'^(log ?in|sign ?(in|up)|home|welcome|just a moment)\b')
+        .hasMatch(l)) {
+      return true;
+    }
+    if (l.contains('log in or sign up') || l.contains('log into')) return true;
+    return false;
+  }
+
+  var best = '';
+  for (final t in cands) {
+    if (!bad(t)) {
+      best = t;
+      break;
+    }
+  }
+  if (best.isEmpty) return '';
   // "Movie name | Site name" -> keep the first part
   final parts = best.split(RegExp(r'\s+[|–—]\s+|\s+-\s+'));
   if (parts.length > 1 && parts.first.trim().length >= 4) best = parts.first;
@@ -211,7 +239,15 @@ Future<String> _pageTitle(BrowserTab tab) async {
 Future<String> _fileNameFor(BrowserTab tab, MediaEntry e) async {
   final fromUrl = _nameFromUrl(e);
   if (fromUrl != null) return '$fromUrl.${e.ext}';
-  final base = await _pageTitle(tab);
+  var base = await _pageTitle(tab);
+  if (base.isEmpty) {
+    // nothing readable on the page: site name + date, never a random id
+    final d = DateTime.now();
+    String t(int v) => v.toString().padLeft(2, '0');
+    final site = tab.host.replaceFirst(RegExp(r'^(www|m)\.'), '').split('.').first;
+    base =
+        '${site.isEmpty ? 'media' : site} ${e.audio ? 'audio' : 'video'} ${d.year}-${t(d.month)}-${t(d.day)} ${t(d.hour)}.${t(d.minute)}';
+  }
   final q = e.audio
       ? (e.label.isNotEmpty ? _safe(e.label) : 'audio')
       : (e.height > 0 ? '${e.height}p' : '');

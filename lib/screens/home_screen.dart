@@ -603,31 +603,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _tabBody() {
-    final h = MediaQuery.sizeOf(context).height * 0.5;
-    final dark = Theme.of(context).brightness == Brightness.dark;
     return Stack(children: [
-      // soft picture behind the top half of the home page, fading out
-      Positioned(
-        left: 0,
-        right: 0,
-        top: 0,
-        height: h,
-        child: IgnorePointer(
-          child: ShaderMask(
-            shaderCallback: (r) => const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.white, Colors.transparent],
-            ).createShader(r),
-            blendMode: BlendMode.dstIn,
-            child: Opacity(
-              opacity: dark ? 0.16 : 0.22,
-              child: Image.asset('assets/home_bg.jpg',
-                  fit: BoxFit.cover, gaplessPlayback: true),
-            ),
-          ),
-        ),
-      ),
       RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
@@ -639,10 +615,56 @@ class _HomeScreenState extends State<HomeScreen> {
               onSubmit: (t) => _openInBrowser(t),
               onSite: (u) => _openInBrowser(u),
             ),
+            _infoCard(),
           ],
         ),
       ),
     ]);
+  }
+
+  /// Picture card under the shortcuts: tells in one line what the app does.
+  Widget _infoCard() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: SizedBox(
+          height: 170,
+          child: Stack(fit: StackFit.expand, children: [
+            Image.asset('assets/home_bg.jpg', fit: BoxFit.cover),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.05),
+                    Colors.black.withValues(alpha: 0.72),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  T('Download from any site',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800)),
+                  SizedBox(height: 4),
+                  T('Open a site, play the video, tap the download icon.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12.5)),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   Widget _summary() {
@@ -1083,24 +1105,24 @@ class _AddLinkButtonState extends State<_AddLinkButton>
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-                color: const Color(0xFF6FA3FF).withValues(alpha: 0.25),
-                blurRadius: 12,
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 10,
                 offset: const Offset(0, 5)),
           ],
         ),
-        child: FloatingActionButton.small(
+        child: FloatingActionButton(
           heroTag: 'add_link',
           elevation: 0,
           focusElevation: 0,
           hoverElevation: 0,
           highlightElevation: 0,
           shape: const CircleBorder(),
-          backgroundColor: const Color(0xFF6FA3FF).withValues(alpha: 0.55),
-          foregroundColor: Colors.white,
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
           tooltip: tr('Add link'),
           onPressed: _tap,
           child: RotationTransition(
-              turns: _turn, child: const Icon(Icons.add_rounded, size: 26)),
+              turns: _turn, child: const Icon(Icons.add_rounded, size: 30)),
         ),
       ),
     );
