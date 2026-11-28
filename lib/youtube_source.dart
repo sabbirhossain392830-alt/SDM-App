@@ -135,9 +135,12 @@ class _YoutubeSheetState extends State<_YoutubeSheet> {
       await DownloadManager.instance.addUrl(
         c.url.toString(),
         suggestedName: '${_cleanTitle(data.title)}.${c.ext}',
-        // Known size, one stream: the stream link is checked by the player
-        // API already, so SDM does not probe it again.
-        probe: ProbeResult(c.bytes > 0 ? c.bytes : -1, false, null, c.mime),
+        // The stream link comes from the player API, so SDM does not probe
+        // it again. Audio-only (adaptive) streams are served in byte-range
+        // pieces by YouTube, so they are downloaded with ranges; a plain
+        // single request for them is often refused.
+        probe: ProbeResult(c.bytes > 0 ? c.bytes : -1,
+            c.isAudio && c.bytes > 0, null, c.mime),
       );
       say('Download started');
     } catch (e) {
