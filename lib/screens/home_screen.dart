@@ -603,20 +603,46 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _tabBody() {
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          const UpdateBanner(),
-          HomeHero(
-            onSubmit: (t) => _openInBrowser(t),
-            onSite: (u) => _openInBrowser(u),
+    final h = MediaQuery.sizeOf(context).height * 0.5;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Stack(children: [
+      // soft picture behind the top half of the home page, fading out
+      Positioned(
+        left: 0,
+        right: 0,
+        top: 0,
+        height: h,
+        child: IgnorePointer(
+          child: ShaderMask(
+            shaderCallback: (r) => const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.white, Colors.transparent],
+            ).createShader(r),
+            blendMode: BlendMode.dstIn,
+            child: Opacity(
+              opacity: dark ? 0.16 : 0.22,
+              child: Image.asset('assets/home_bg.jpg',
+                  fit: BoxFit.cover, gaplessPlayback: true),
+            ),
           ),
-        ],
+        ),
       ),
-    );
+      RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 24),
+          children: [
+            const UpdateBanner(),
+            HomeHero(
+              onSubmit: (t) => _openInBrowser(t),
+              onSite: (u) => _openInBrowser(u),
+            ),
+          ],
+        ),
+      ),
+    ]);
   }
 
   Widget _summary() {
@@ -1057,8 +1083,8 @@ class _AddLinkButtonState extends State<_AddLinkButton>
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-                color: const Color(0xFF4A5BE0).withValues(alpha: 0.35),
-                blurRadius: 14,
+                color: const Color(0xFF6FA3FF).withValues(alpha: 0.25),
+                blurRadius: 12,
                 offset: const Offset(0, 5)),
           ],
         ),
@@ -1069,7 +1095,7 @@ class _AddLinkButtonState extends State<_AddLinkButton>
           hoverElevation: 0,
           highlightElevation: 0,
           shape: const CircleBorder(),
-          backgroundColor: const Color(0xFF4A5BE0),
+          backgroundColor: const Color(0xFF6FA3FF).withValues(alpha: 0.55),
           foregroundColor: Colors.white,
           tooltip: tr('Add link'),
           onPressed: _tap,
