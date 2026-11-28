@@ -4,10 +4,9 @@ import 'package:flutter/services.dart';
 import '../l10n.dart';
 import 'app_settings_screen.dart';
 import 'home_screen.dart';
-import 'play_tab.dart';
 
 /// The app's main screen: three tabs at the bottom.
-/// Download (search box + downloads), Play (videos and songs), Settings.
+/// Download (logo + search box), Play (speed card, filters, downloads), Settings.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -22,7 +21,7 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final dark = cs.brightness == Brightness.dark;
-    final accent = dark ? const Color(0xFFFFC800) : cs.primary;
+    final accent = dark ? const Color(0xFF6FA3FF) : const Color(0xFF4A5BE0);
     Widget dest(IconData icon, String label) => NavigationDestination(
           icon: Icon(icon, color: cs.outline),
           selectedIcon: Icon(icon, color: accent),
@@ -38,7 +37,7 @@ class _MainShellState extends State<MainShell> {
           index: _i,
           children: [
             const HomeScreen(tab: true),
-            PlayTab(active: _i == 1),
+            const HomeScreen(library: true),
             const AppSettingsScreen(),
           ],
         ),
