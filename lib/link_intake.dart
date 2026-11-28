@@ -9,6 +9,7 @@ import 'browser/download_prompt.dart';
 import 'download_manager.dart';
 import 'models.dart';
 import 'open_file.dart';
+import 'youtube_source.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -114,7 +115,9 @@ class LinkIntake with WidgetsBindingObserver {
   Future<void> handleText(String text) async {
     final url = extractUrl(text);
     if (url == null) return;
-    if (looksLikeFile(url)) {
+    if (isYoutubeLink(url)) {
+      await _offerYoutube(url);
+    } else if (looksLikeFile(url)) {
       await _offer(url);
     } else {
       _openInBrowser(url);
@@ -154,12 +157,31 @@ class LinkIntake with WidgetsBindingObserver {
       final text = data?.text?.trim();
       if (text == null || text.isEmpty || text == _lastClipboard) return;
       final url = extractUrl(text);
-      if (url == null || !looksLikeFile(url) || isUnsupportedHost(url)) return;
+      if (url == null) return;
+      final yt = isYoutubeLink(url);
+      if (!yt && (!looksLikeFile(url) || isUnsupportedHost(url))) return;
       _lastClipboard = text;
       final p = await SharedPreferences.getInstance();
       await p.setString(_prefKey, text);
-      await _offer(url);
+      if (yt) {
+        await _offerYoutube(url);
+      } else {
+        await _offer(url);
+      }
     } catch (_) {}
+  }
+
+  /// A YouTube link: pick video (with sound) or audio only, then download.
+  Future<void> _offerYoutube(String url) async {
+    if (_busy) return;
+    final ctx = rootNavigatorKey.currentContext;
+    if (ctx == null) return;
+    _busy = true;
+    try {
+      await showYoutubeSheet(ctx, url);
+    } finally {
+      _busy = false;
+    }
   }
 
   Future<void> _offer(String url) async {

@@ -23,9 +23,11 @@ const String _ua =
     'Chrome/120.0 Mobile Safari/537.36';
 
 /// Result of inspecting a URL before downloading it.
-/// Hosts SDM does not download from (YouTube's terms forbid it).
+/// YouTube page links are not plain files. They are handled by
+/// youtube_source.dart (it picks a stream and then calls addUrl with the
+/// direct stream link on googlevideo.com, which must stay allowed here).
 const unsupportedMessage =
-    'YouTube links are not supported. Use YouTube Premium for offline videos.';
+    'This YouTube link cannot be downloaded as a plain file.';
 
 bool isUnsupportedHost(String url) {
   final host = (Uri.tryParse(url)?.host ?? '').toLowerCase();
@@ -33,7 +35,6 @@ bool isUnsupportedHost(String url) {
     'youtube.com',
     'youtu.be',
     'youtube-nocookie.com',
-    'googlevideo.com',
   ];
   return blocked.any((b) => host == b || host.endsWith('.$b'));
 }
