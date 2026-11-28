@@ -3,6 +3,7 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import 'download_manager.dart';
 import 'models.dart';
+import 'sheet_style.dart';
 
 /// True for a YouTube page link (youtube.com, youtu.be, ...).
 bool isYoutubeLink(String url) {
@@ -107,12 +108,7 @@ Future<_Loaded> _load(String link) async {
 
 /// Bottom sheet: shows the video name and what can be downloaded.
 Future<void> showYoutubeSheet(BuildContext context, String link) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (_) => _YoutubeSheet(link: link),
-  );
+  return showSdmSheet<void>(context, builder: (_) => _YoutubeSheet(link: link));
 }
 
 class _YoutubeSheet extends StatefulWidget {
