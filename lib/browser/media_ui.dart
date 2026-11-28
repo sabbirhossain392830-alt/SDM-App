@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../download_manager.dart';
 import '../l10n.dart';
+import '../sheet_style.dart';
 import '../models.dart';
 import 'browser_controller.dart';
 import 'browser_tab.dart';
@@ -185,19 +186,8 @@ Future<void> showMediaSheet(
   BrowserTab tab,
   void Function(DownloadRequest) onDownload,
 ) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    useSafeArea: true,
-    sheetAnimationStyle: const AnimationStyle(
-      duration: Duration(milliseconds: 420),
-      reverseDuration: Duration(milliseconds: 240),
-      curve: Curves.easeOutCubic,
-    ),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
+  return showSdmSheet<void>(
+    context,
     builder: (ctx) => _MediaSheet(
       tab: tab,
       onPick: (e) {

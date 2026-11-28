@@ -9,6 +9,7 @@ import '../folder_picker.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../l10n.dart';
+import '../sheet_style.dart';
 
 /// A download the browser wants to hand over to SDM.
 class DownloadRequest {
@@ -90,52 +91,10 @@ Future<bool> showDownloadPrompt(
   // the remembered folder is known without waiting, so the popup opens at once
   // and complete
   final dir = DownloadManager.instance.preferredDirSync;
-  // set when the download starts: the popup then flies up to the downloads icon
-  var flying = false;
-  final result = await showGeneralDialog<bool>(
-    context: context,
-    barrierDismissible: true,
-    barrierLabel: 'Dismiss',
-    barrierColor: Colors.black.withValues(alpha: 0.55),
-    transitionDuration: const Duration(milliseconds: 380),
-    pageBuilder: (_, __, ___) => _PromptSheet(
-        req: req,
-        initialDir: dir,
-        pre: pre,
-        ready: ready,
-        onLaunch: () => flying = true),
-    // In: rises and grows a little while fading in. Out after "Download":
-    // shrinks and flies to the downloads icon (top right). Out after Cancel:
-    // just sinks away. Drawn as one cached layer.
-    transitionBuilder: (context, anim, _, child) {
-      final c = CurvedAnimation(
-          parent: anim,
-          curve: const Cubic(0.16, 1, 0.3, 1), // fast start, long soft landing
-          reverseCurve: Curves.easeInCubic);
-      final cached = RepaintBoundary(child: child);
-      return AnimatedBuilder(
-        animation: c,
-        child: cached,
-        builder: (ctx, ch) {
-          final v = c.value;
-          final out = flying && anim.status == AnimationStatus.reverse;
-          final size = MediaQuery.sizeOf(ctx);
-          final scale = out ? 0.12 + 0.88 * v : 0.88 + 0.12 * v;
-          final dx = out ? (1 - v) * size.width * 0.40 : 0.0;
-          final dy = out
-              ? -(1 - v) * size.height * 0.45
-              : (1 - v) * size.height * 0.05;
-          final opacity = out ? (v * 1.8).clamp(0.0, 1.0) : v;
-          return Opacity(
-            opacity: opacity,
-            child: Transform.translate(
-              offset: Offset(dx, dy),
-              child: Transform.scale(scale: scale, child: ch),
-            ),
-          );
-        },
-      );
-    },
+  final result = await showSdmSheet<bool>(
+    context,
+    builder: (_) => _PromptSheet(
+        req: req, initialDir: dir, pre: pre, ready: ready, onLaunch: null),
   );
   return result == true;
 }
@@ -375,19 +334,11 @@ class _PromptSheetState extends State<_PromptSheet> {
           ),
         ];
 
-        return Center(
-          child: Dialog(
-            insetPadding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-            elevation: 8,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            surfaceTintColor: Colors.transparent,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        return Padding(
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+          child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: AnimatedSize(
                   duration: const Duration(milliseconds: 240),
                   curve: Curves.easeOutCubic,
@@ -512,8 +463,6 @@ class _PromptSheetState extends State<_PromptSheet> {
                   ),
                 ),
               ),
-            ),
-          ),
         );
       },
     );
