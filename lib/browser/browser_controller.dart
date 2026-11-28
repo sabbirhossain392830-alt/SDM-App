@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -313,6 +314,13 @@ class BrowserController extends ChangeNotifier {
 
   /// True while the browser screen is on the navigation stack.
   bool screenOpen = false;
+
+  /// Whether the browser is the screen shown in the main window (the bottom
+  /// bar of the main window stays visible either way).
+  final ValueNotifier<bool> visible = ValueNotifier(false);
+
+  void openScreen() => visible.value = true;
+  void closeScreen() => visible.value = false;
 
   BrowserTab newTab(
       {String? url, int? windowId, bool activate = true, bool incognito = false}) {
@@ -785,6 +793,34 @@ class BrowserController extends ChangeNotifier {
     return _icons[h];
   }
 
+  final Set<String> _iconTried = {};
+  final Dio _iconDio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 5),
+    receiveTimeout: const Duration(seconds: 6),
+    responseType: ResponseType.bytes,
+    headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 13) SDM'},
+  ));
+
+  /// Fetches the logo of a site when none is known yet (used by shortcuts).
+  Future<void> ensureIcon(String url) async {
+    final u = Uri.tryParse(url.startsWith('http') ? url : 'https://$url');
+    final h = u?.host ?? '';
+    if (h.isEmpty || iconFor('https://$h') != null || !_iconTried.add(h)) return;
+    for (final src in [
+      'https://www.google.com/s2/favicons?domain=$h&sz=128',
+      'https://$h/favicon.ico',
+    ]) {
+      try {
+        final r = await _iconDio.get<List<int>>(src);
+        final data = r.data;
+        if (data != null && data.length > 120 && data.length <= 24000) {
+          rememberIcon('https://$h', Uint8List.fromList(data));
+          return;
+        }
+      } catch (_) {}
+    }
+  }
+
   void rememberIcon(String url, Uint8List? icon) {
     final h = Uri.tryParse(url)?.host ?? '';
     if (h.isEmpty || icon == null || icon.isEmpty || icon.length > 24000) {
@@ -838,6 +874,7 @@ class BrowserController extends ChangeNotifier {
     shortcuts.add(Shortcut(n, u));
     notifyListeners();
     await save();
+    ensureIcon(u);
   }
 
   Future<void> removeShortcut(Shortcut s) async {

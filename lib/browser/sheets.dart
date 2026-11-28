@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'browser_controller.dart';
-import 'browser_screen.dart';
 import 'browser_tab.dart';
 import 'download_prompt.dart';
 import '../l10n.dart';
@@ -298,14 +297,8 @@ class _HistoryScreenState extends State<HistoryScreen>
 
   void _open(String url) {
     browser.navigate(url);
-    if (widget.fromHome) {
-      Navigator.pushReplacement<void, void>(
-        context,
-        MaterialPageRoute(builder: (_) => const BrowserScreen()),
-      );
-    } else {
-      Navigator.pop(context);
-    }
+    browser.openScreen();
+    Navigator.pop(context);
   }
 
   @override
