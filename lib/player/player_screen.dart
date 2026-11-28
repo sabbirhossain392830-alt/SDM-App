@@ -681,7 +681,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               ),
               child: Text(t,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: Colors.white, fontSize: _subSize, height: 1.3)),
             ),
           );
